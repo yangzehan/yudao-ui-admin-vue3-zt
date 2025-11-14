@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm dev)",
+      "Bash(pnpm ts:check:*)",
+      "Bash(npx vue-tsc:*)",
+      "Bash(pnpm add monaco-editor @monaco-editor/vue)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

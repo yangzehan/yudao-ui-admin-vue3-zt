@@ -746,6 +746,78 @@ const remainingRouter: AppRouteRecordRaw[] = [
         component: () => import('@/views/iot/ota/firmware/detail/index.vue')
       }
     ]
+  },
+  {
+    path: '/datastudio',
+    component: Layout,
+    name: 'DataStudio',
+    meta: {
+      title: 'DataStudio',
+      icon: 'ep:code',
+      noCache: false
+    },
+    children: [
+      {
+        path: 'quick-start',
+        component: () => import('@/views/dataStudio/index.vue'),
+        name: 'DataStudioQuickStart',
+        meta: {
+          title: '快速开始',
+          icon: 'ep:home-filled',
+          noCache: false
+        }
+      },
+      {
+        path: 'project',
+        component: () => import('@/views/dataStudio/components/ProjectManagement.vue'),
+        name: 'DataStudioProject',
+        meta: {
+          title: '项目管理',
+          icon: 'ep:folder',
+          noCache: false
+        }
+      },
+      {
+        path: 'datasource',
+        component: () => import('@/views/dataStudio/components/DataSourceManagement.vue'),
+        name: 'DataStudioDataSource',
+        meta: {
+          title: '数据源管理',
+          icon: 'ep:data-line',
+          noCache: false
+        }
+      },
+      {
+        path: 'function',
+        component: () => import('@/views/dataStudio/components/FunctionManagement.vue'),
+        name: 'DataStudioFunction',
+        meta: {
+          title: '函数管理',
+          icon: 'ep:magic-stick',
+          noCache: false
+        }
+      },
+      {
+        path: 'resource',
+        component: () => import('@/views/dataStudio/components/ResourceManagement.vue'),
+        name: 'DataStudioResource',
+        meta: {
+          title: '资源管理',
+          icon: 'ep:files',
+          noCache: false
+        }
+      },
+      {
+        path: 'service',
+        component: () => import('@/views/dataStudio/components/ServiceManagement.vue'),
+        name: 'DataStudioService',
+        meta: {
+          title: '服务管理',
+          icon: 'ep:monitor',
+          noCache: false
+        }
+      }
+    ]
   }
 ]
 
