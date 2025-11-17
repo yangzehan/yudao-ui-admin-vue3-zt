@@ -770,7 +770,7 @@ const remainingRouter: AppRouteRecordRaw[] = [
       {
         path: 'project',
         component: () => import('@/views/dataStudio/components/ProjectManagement.vue'),
-        name: 'DataStudioProject',
+        name: 'DataStudioProject2',
         meta: {
           title: '项目管理',
           icon: 'ep:folder',

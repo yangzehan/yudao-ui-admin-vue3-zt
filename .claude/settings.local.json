@@ -4,7 +4,10 @@
       "Bash(pnpm dev)",
       "Bash(pnpm ts:check:*)",
       "Bash(npx vue-tsc:*)",
-      "Bash(pnpm add monaco-editor @monaco-editor/vue)"
+      "Bash(pnpm add monaco-editor @monaco-editor/vue)",
+      "Bash(tree:*)",
+      "Bash(npx tsc:*)",
+      "Bash(pnpm lint:eslint:*)"
     ],
     "deny": [],
     "ask": []

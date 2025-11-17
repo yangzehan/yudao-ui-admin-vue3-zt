@@ -1,212 +1,536 @@
 <template>
-  <div class="v-project-management">
-    <div class="v-project-management__header">
-      <h2>项目管理</h2>
-      <p>创建和管理 Flink SQL 项目</p>
-    </div>
-
-    <div class="v-project-management__toolbar">
-      <el-button type="primary" icon="Plus" @click="handleCreateProject">
-        新建项目
-      </el-button>
-      <el-button icon="FolderOpened" @click="handleImportProject">
-        导入项目
-      </el-button>
-      <el-button icon="Refresh" @click="handleRefresh">
-        刷新
-      </el-button>
-    </div>
-
-    <div class="v-project-management__content">
-      <el-row :gutter="16">
-        <el-col :span="8">
-          <div class="v-project-management__tree">
-            <div class="v-project-management__tree-header">
-              <el-input
-                v-model="searchText"
-                placeholder="搜索项目"
-                prefix-icon="Search"
-                clearable
-              />
-            </div>
-            <div class="v-project-management__tree-content">
-              <el-tree
-                ref="treeRef"
-                :data="projectTree"
-                :props="treeProps"
-                :filter-node-method="filterNode"
-                node-key="id"
-                default-expand-all
-                :contextmenu="handleContextMenu"
-                @node-contextmenu="handleRightClick"
-                @node-click="handleNodeClick"
+  <ContentWrap>
+    <!-- 主要内容区域：Splitter 布局 -->
+    <div class="h-[calc(100vh-120px)] mt-16px">
+      <el-splitter class="h-full">
+      <!-- 左侧文件管理窗口 -->
+      <el-splitter-panel size="30%" :min="200" class="flex flex-col bg-[var(--el-bg-color)]">
+        <!-- 文件管理头部 -->
+        <div class="flex-shrink-0 px-16px py-12px border-b border-[var(--el-border-color)] bg-[var(--el-fill-color-light)]">
+          <h3 class="m-0 text-14px font-600 text-[var(--el-text-color-primary)]">文件管理</h3>
+        </div>
+        <!-- 搜索框 -->
+        <div class="flex-shrink-0 px-16px py-12px border-b border-[var(--el-border-color)]">
+          <el-input
+            v-model="searchKeyword"
+            placeholder="搜索文件..."
+            :prefix-icon="Search"
+            clearable
+            @input="handleSearch"
+          />
+        </div>
+        <!-- 文件树区域 -->
+        <div class="flex-1 overflow-y-auto p-8px">
+          <el-tree
+            :data="filteredFileTreeData"
+            :props="treeProps"
+            default-expand-all
+            @node-click="handleNodeClick"
+          >
+            <template #default="{  data }">
+              <div
+                class="flex items-center gap-8px text-14px w-full cursor-default"
+                @contextmenu.prevent="handleNodeContextMenu($event, data)"
               >
-                <template #default="{ node, data }">
-                  <span class="v-project-management__tree-node">
-                    <el-icon v-if="data.type === 'project'"><Folder /></el-icon>
-                    <el-icon v-else-if="data.type === 'folder'"><FolderOpened /></el-icon>
-                    <el-icon v-else><Document /></el-icon>
-                    <span>{{ node.label }}</span>
-                  </span>
-                </template>
-              </el-tree>
-            </div>
-          </div>
-        </el-col>
-
-        <el-col :span="16">
-          <div class="v-project-management__ide">
-            <!-- IDE 工具栏 -->
-            <div class="v-project-management__ide-toolbar">
-              <div class="v-project-management__ide-toolbar-left">
-                <span class="ide-title">{{ selectedNode?.label || 'IDE 编辑器' }}</span>
-                <el-tag v-if="selectedNode" size="small" :type="getNodeTagType(selectedNode.type)">
-                  {{ getNodeTypeLabel(selectedNode.type) }}
-                </el-tag>
+                <el-icon v-if="data.type === 'folder'" class="text-[var(--el-color-primary)]"><FolderOpened /></el-icon>
+                <el-icon v-else-if="data.type === 'sql'" class="text-[var(--el-color-primary)]"><Document /></el-icon>
+                <el-icon v-else class="text-[var(--el-color-primary)]"><FileText /></el-icon>
+                <span>{{ data.name }}</span>
               </div>
-              <div class="v-project-management__ide-toolbar-right">
-                <el-button-group>
-                  <el-button size="small" icon="Edit" @click="handleEditProject" :disabled="!selectedNode">编辑</el-button>
-                  <el-button size="small" icon="Delete" @click="handleDeleteProject" :disabled="!selectedNode">删除</el-button>
-                </el-button-group>
-                <el-divider direction="vertical" />
-                <el-button-group>
-                  <el-button size="small" icon="VideoPlay" @click="handleExecute" :disabled="!selectedNode || selectedNode.type !== 'file'">执行</el-button>
-                  <el-button size="small" icon="Connection" @click="handleDebug" :disabled="!selectedNode || selectedNode.type !== 'file'">调试</el-button>
-                  <el-button size="small" icon="Switch" @click="handleStop" :disabled="!selectedNode || selectedNode.type !== 'file'">停止</el-button>
-                </el-button-group>
-                <el-divider direction="vertical" />
-                <el-button-group>
-                  <el-button size="small" icon="DocumentAdd" @click="handleNewFile">新建</el-button>
-                  <el-button size="small" icon="FolderAdd" @click="handleNewFolder">新建文件夹</el-button>
-                </el-button-group>
+            </template>
+          </el-tree>
+
+          <!-- 右键菜单 -->
+          <div
+            v-if="contextMenuVisible"
+            class="fixed bg-[var(--el-bg-color)] border border-[var(--el-border-color)] rounded-4px shadow-lg p-4px z-2000 min-w-140px"
+            :style="{ top: contextMenuY + 'px', left: contextMenuX + 'px' }"
+            @click.stop
+          >
+            <template v-if="contextMenuTarget?.type === 'folder'">
+              <div class="flex items-center gap-8px px-16px py-8px text-14px text-[var(--el-text-color-primary)] cursor-pointer transition-colors-300 hover:bg-[var(--el-fill-color-light)]" @click="handleCreateFile">
+                <el-icon class="text-16px"><Document /></el-icon>
+                <span>新增文件</span>
               </div>
-            </div>
-
-            <!-- IDE 内容区域 -->
-            <div class="v-project-management__ide-content">
-              <template v-if="selectedNode && selectedNode.type === 'file'">
-                <!-- 文件编辑器 -->
-                <div class="v-project-management__editor-container">
-                  <div class="v-project-management__editor-tabs">
-                    <el-tabs v-model="activeTab" type="card" closable @tab-remove="handleTabRemove">
-                      <el-tab-pane
-                        v-for="tab in editorTabs"
-                        :key="tab.id"
-                        :label="tab.label"
-                        :name="tab.id"
-                      >
-                        <div class="editor-wrapper">
-                          <MonacoEditor
-                            v-model="tab.content"
-                            :language="getFileLanguage(tab.label)"
-                            :height="'100%'"
-                            :options="editorOptions"
-                            @change="handleEditorChange(tab.id, $event)"
-                          />
-                        </div>
-                      </el-tab-pane>
-                    </el-tabs>
-                  </div>
-                </div>
-              </template>
-              <template v-else-if="selectedNode">
-                <!-- 项目/文件夹详情 -->
-                <div class="v-project-management__node-detail">
-                  <el-descriptions :column="2" border>
-                    <el-descriptions-item label="名称">{{ selectedNode.label }}</el-descriptions-item>
-                    <el-descriptions-item label="类型">{{ getNodeTypeLabel(selectedNode.type) }}</el-descriptions-item>
-                    <el-descriptions-item label="创建时间">2024-01-01 10:00:00</el-descriptions-item>
-                    <el-descriptions-item label="修改时间">2024-01-01 12:00:00</el-descriptions-item>
-                    <el-descriptions-item label="描述" :span="2">
-                      {{ getNodeDescription(selectedNode.type) }}
-                    </el-descriptions-item>
-                  </el-descriptions>
-                </div>
-              </template>
-              <template v-else>
-                <!-- 欢迎页面 -->
-                <div class="v-project-management__welcome">
-                  <el-empty description="请选择一个项目或文件开始编辑" />
-                  <div class="welcome-tips">
-                    <h3>快速开始</h3>
-                    <ul>
-                      <li>在左侧选择一个项目或文件进行编辑</li>
-                      <li>右键点击项目树可以创建新文件或文件夹</li>
-                      <li>支持 Flink SQL、Python、Java 等多种语言</li>
-                      <li>使用工具栏按钮执行、调试和停止任务</li>
-                    </ul>
-                  </div>
-                </div>
-              </template>
-            </div>
+              <div class="flex items-center gap-8px px-16px py-8px text-14px text-[var(--el-text-color-primary)] cursor-pointer transition-colors-300 hover:bg-[var(--el-fill-color-light)]" @click="handleCreateFolder">
+                <el-icon class="text-16px"><FolderOpened /></el-icon>
+                <span>新增子文件夹</span>
+              </div>
+              <div class="flex items-center gap-8px px-16px py-8px text-14px text-[var(--el-text-color-primary)] cursor-pointer transition-colors-300 hover:bg-[var(--el-fill-color-light)]" @click="handleRename">
+                <el-icon class="text-16px"><EditPen /></el-icon>
+                <span>重命名</span>
+              </div>
+            </template>
+            <template v-else>
+              <div class="flex items-center gap-8px px-16px py-8px text-14px text-[var(--el-color-danger)] cursor-pointer transition-colors-300 hover:bg-[var(--el-color-danger-light-9)]" @click="handleDelete">
+                <el-icon class="text-16px"><Delete /></el-icon>
+                <span>删除</span>
+              </div>
+              <div class="flex items-center gap-8px px-16px py-8px text-14px text-[var(--el-text-color-primary)] cursor-pointer transition-colors-300 hover:bg-[var(--el-fill-color-light)]" @click="handleRename">
+                <el-icon class="text-16px"><EditPen /></el-icon>
+                <span>重命名</span>
+              </div>
+              <div class="flex items-center gap-8px px-16px py-8px text-14px text-[var(--el-text-color-primary)] cursor-pointer transition-colors-300 hover:bg-[var(--el-fill-color-light)]" @click="handleMove">
+                <el-icon class="text-16px"><Rank /></el-icon>
+                <span>移动</span>
+              </div>
+            </template>
           </div>
-        </el-col>
-      </el-row>
-    </div>
+        </div>
+      </el-splitter-panel>
 
-    <!-- 右键菜单 -->
+      <!-- 右侧文件编辑器 -->
+      <el-splitter-panel :min="400" class="flex flex-col bg-[var(--el-bg-color)]">
+        <!-- 编辑器工具栏 -->
+        <div class="flex-shrink-0 px-16px py-12px border-b border-[var(--el-border-color)] bg-[var(--el-fill-color-light)] flex justify-end items-center gap-8px">
+          <el-button type="primary" size="small" icon="VideoPlay">
+            运行
+          </el-button>
+          <el-button type="warning" size="small" icon="Connection">
+            调试
+          </el-button>
+          <el-button ref="saveButtonRef" type="success" size="small" icon="DocumentChecked" @click="handleSave">
+            保存
+          </el-button>
+        </div>
+        <!-- 编辑器标签页和内容区 -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+          <template v-if="openedFiles.length > 0">
+            <el-tabs
+              v-model="activeTabId"
+              type="card"
+              closable
+              @tab-remove="handleRemoveTab"
+              @tab-click="handleTabClick"
+              class="h-full flex flex-col"
+            >
+              <el-tab-pane
+                v-for="file in openedFiles"
+                :key="file.id"
+                :label="file.name + (file.isDirty ? ' •' : '')"
+                :name="file.id!.toString()"
+              >
+                <div class="absolute inset-0 overflow-hidden">
+                  <MonacoEditor
+                    v-model="file.content"
+                    language="sql"
+                    :height="'100%'"
+                    :options="editorOptions"
+                    @change="handleContentChange(file)"
+                  />
+                </div>
+              </el-tab-pane>
+            </el-tabs>
+          </template>
+          <div v-else class="flex-1 flex items-center justify-center">
+            <el-empty description="请从左侧选择文件进行编辑" />
+          </div>
+        </div>
+      </el-splitter-panel>
+    </el-splitter>
+
+    <!-- 移动文件对话框 -->
     <el-dialog
-      v-model="contextMenuVisible"
-      :show-close="false"
-      :modal="false"
-      :width="contextMenuWidth"
-      :style="contextMenuStyle"
-      class="v-project-management__context-menu"
+      v-model="moveDialogVisible"
+      title="移动文件"
+      width="500px"
+      @close="moveDialogVisible = false"
     >
-      <div class="context-menu-content">
-        <div class="context-menu-item" @click="handleContextMenuAction('new-folder')">
-          <el-icon><FolderAdd /></el-icon>
-          <span>新建文件夹</span>
-        </div>
-        <div class="context-menu-item" @click="handleContextMenuAction('new-file')">
-          <el-icon><DocumentAdd /></el-icon>
-          <span>新建文件</span>
-        </div>
-        <el-divider />
-        <div class="context-menu-item danger" @click="handleContextMenuAction('delete')">
-          <el-icon><Delete /></el-icon>
-          <span>删除</span>
-        </div>
+      <div class="p-20px">
+        <p class="mb-16px text-14px text-[var(--el-text-color-primary)]">
+          请选择目标文件夹：
+        </p>
+        <el-select
+          v-model="targetFolderId"
+          placeholder="选择文件夹"
+          class="w-full"
+          filterable
+        >
+          <el-option
+            v-for="folder in flattenFolders(fileTreeData)"
+            :key="folder.value"
+            :label="folder.label"
+            :value="folder.value"
+          />
+        </el-select>
       </div>
+      <template #footer>
+        <el-button @click="moveDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmMove">确定</el-button>
+      </template>
     </el-dialog>
-  </div>
+    </div>
+  </ContentWrap>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, nextTick } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useMessage } from '@/hooks/web/useMessage'
 import MonacoEditor from '@/components/monaco-editor/MonacoEditor.vue'
 
-// 搜索文本
-const searchText = ref('')
+import { Search } from '@element-plus/icons-vue'
+import { Document, EditPen, Delete, Rank, FolderOpened, Close } from '@element-plus/icons-vue'
+import { ElSelect } from 'element-plus'
+import {
+  getFileTree,
+  createFile,
+  deleteFile,
+  renameFile,
+  moveFile,
+  getFileContent,
+  saveFileContent,
+  generateFilePath,
+  getFileType, FileManageVO
+} from '@/api/dataStudio/file'
+import { ElMessageBox } from 'element-plus'
 
-// 树组件引用
-const treeRef = ref()
+const message = useMessage() // 消息弹窗
 
-// 选中的节点
-const selectedNode = ref<any>(null)
+// 文件树数据
+const fileTreeData = ref<FileManageVO[]>([])
 
-// 右键菜单相关
+// 搜索关键词
+const searchKeyword = ref('')
+
+// 保存按钮引用
+const saveButtonRef = ref()
+
+// 已打开的文件列表
+interface OpenedFile extends FileManageVO {
+  content: string
+  isDirty: boolean
+}
+const openedFiles = ref<OpenedFile[]>([])
+
+// 当前激活的标签页ID
+const activeTabId = ref<string | null>(null)
+
+// 右键菜单状态
 const contextMenuVisible = ref(false)
-const contextMenuStyle = ref({
-  position: 'fixed',
-  left: '0px',
-  top: '0px'
-})
-const contextMenuWidth = ref('150px')
 const contextMenuX = ref(0)
 const contextMenuY = ref(0)
-const contextMenuNode = ref<any>(null)
+const contextMenuTarget = ref<any>(null)
 
-// IDE 编辑器相关
-const activeTab = ref('')
-const editorTabs = ref<Array<{
-  id: string
-  label: string
-  content: string
-  node: any
-}>>([])
+// 移动文件对话框状态
+const moveDialogVisible = ref(false)
+const targetFolderId = ref<number>(0)
+
+// ==================== 数据加载 ====================
+
+// 文件树排序函数：文件排在文件夹前面，文件按创建时间降序排序
+const sortFileTreeData = (nodes: FileManageVO[]): FileManageVO[] => {
+  return nodes
+    .map(node => ({
+      ...node,
+      children: node.children ? sortFileTreeData(node.children) : []
+    }))
+    .sort((a, b) => {
+      // 如果一个是文件，一个是文件夹，文件排在前面
+      if (a.type === 'folder' && b.type !== 'folder') {
+        return 1 // a在b后面
+      }
+      if (a.type !== 'folder' && b.type === 'folder') {
+        return -1 // a在b前面
+      }
+
+      // 如果都是文件或都是文件夹，按创建时间降序排序
+      if (a.createTime && b.createTime) {
+        return new Date(b.createTime).getTime() - new Date(a.createTime).getTime()
+      }
+
+      // 如果没有创建时间，按sort字段排序
+      if (a.sort !== undefined && b.sort !== undefined) {
+        return a.sort - b.sort
+      }
+
+      // 最后按名称排序
+      return a.name.localeCompare(b.name)
+    })
+}
+
+// 加载文件树
+const loadFileTree = async () => {
+  try {
+    const data = await getFileTree()
+    fileTreeData.value = sortFileTreeData(data)
+  } catch (error) {
+    console.error('加载文件树失败:', error)
+    message.error('加载文件树失败')
+  }
+}
+
+// 加载文件内容并添加到已打开文件列表
+const loadFileContent = async (file: FileManageVO) => {
+  try {
+    const content = await getFileContent(file.id!)
+    const newFile: OpenedFile = {
+      ...file,
+      content: content || `-- ${file.name}\n-- 文件内容编辑区域\nSELECT * FROM table_name;`,
+      isDirty: false
+    }
+    openedFiles.value.push(newFile)
+    activeTabId.value = file.id!.toString()
+  } catch (error) {
+    console.error('加载文件内容失败:', error)
+    message.error('加载文件内容失败')
+  }
+}
+
+// 刷新文件树
+const refreshFileTree = async () => {
+  await loadFileTree()
+}
+
+// ==================== 事件处理 ====================
+
+// 键盘事件处理
+const handleKeyboard = (event: KeyboardEvent) => {
+  // 检查 Ctrl+S (Windows/Linux) 或 Cmd+S (Mac)
+  if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+    event.preventDefault() // 阻止浏览器默认的保存行为
+    event.stopPropagation() // 阻止事件冒泡
+    handleSave()
+  }
+}
+
+// 右键节点菜单处理
+const handleNodeContextMenu = (event: MouseEvent, data: FileManageVO) => {
+  contextMenuX.value = event.clientX
+  contextMenuY.value = event.clientY
+  contextMenuTarget.value = data
+  contextMenuVisible.value = true
+}
+
+// 隐藏右键菜单
+const hideContextMenu = () => {
+  contextMenuVisible.value = false
+}
+
+// 点击其他地方隐藏菜单
+const handleDocumentClick = () => {
+  hideContextMenu()
+}
+
+// ==================== 工具函数 ====================
+
+// 扁平化文件夹树为选项列表
+const flattenFolders = (nodes: FileManageVO[], parentPath: string = ''): { value: number; label: string }[] => {
+  const result: { value: number; label: string }[] = []
+
+  const traverse = (nodes: FileManageVO[], currentPath: string) => {
+    nodes.forEach(node => {
+      if (node.type === 'folder' && node.id !== undefined && node.id !== null) {
+        const fullPath = currentPath ? `${currentPath}/${node.name}` : node.name
+        result.push({
+          value: node.id,
+          label: fullPath
+        })
+        if (node.children && node.children.length > 0) {
+          traverse(node.children, fullPath)
+        }
+      }
+    })
+  }
+
+  traverse(nodes, parentPath)
+  return result
+}
+
+// ==================== 右键菜单操作 ====================
+
+// 新增文件
+const handleCreateFile = async () => {
+  const folder = contextMenuTarget.value
+  try {
+    const { value: fileName } = await ElMessageBox.prompt('请输入文件名称', '新增文件', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputPattern: /.+/,
+      inputErrorMessage: '文件名称不能为空'
+    })
+
+    const parentId = folder?.type === 'folder' ? folder.id : folder?.parentId || 0
+    const filePath = generateFilePath(folder?.filePath || '/project', fileName)
+    const type = getFileType(fileName)
+
+    await createFile({
+      name: fileName,
+      type,
+      parentId,
+      filePath,
+      sort: 0,
+      status: 1
+    })
+
+    message.success('创建成功')
+    await refreshFileTree()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('创建文件失败:', error)
+      message.error('创建文件失败')
+    }
+  } finally {
+    hideContextMenu()
+  }
+}
+
+// 新增子文件夹
+const handleCreateFolder = async () => {
+  const folder = contextMenuTarget.value
+  try {
+    const { value: folderName } = await ElMessageBox.prompt('请输入文件夹名称', '新增子文件夹', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputPattern: /.+/,
+      inputErrorMessage: '文件夹名称不能为空'
+    })
+
+    const parentId = folder.id
+    const filePath = generateFilePath(folder?.filePath || '/project', folderName)
+
+    await createFile({
+      name: folderName,
+      type: 'folder',
+      parentId,
+      filePath,
+      sort: 0,
+      status: 1
+    })
+
+    message.success('创建成功')
+    await refreshFileTree()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('创建文件夹失败:', error)
+      message.error('创建文件夹失败')
+    }
+  } finally {
+    hideContextMenu()
+  }
+}
+
+// 重命名
+const handleRename = async () => {
+  const item = contextMenuTarget.value
+  if (!item) return
+
+  try {
+    const { value: newName } = await ElMessageBox.prompt('请输入新名称', '重命名', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputValue: item.name,
+      inputPattern: /.+/,
+      inputErrorMessage: '名称不能为空'
+    })
+
+    await renameFile(item.id!, newName)
+    message.success('重命名成功')
+    await refreshFileTree()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('重命名失败:', error)
+      message.error('重命名失败')
+    }
+  } finally {
+    hideContextMenu()
+  }
+}
+
+// 删除文件
+const handleDelete = async () => {
+  const item = contextMenuTarget.value
+  if (!item) return
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除 "${item.name}" ${item.type === 'folder' ? '及其所有子文件' : ''} 吗？`,
+      '删除确认',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    await deleteFile(item.id!)
+    message.success('删除成功')
+    await refreshFileTree()
+
+    // 如果删除的是已打开的文件，关闭对应的标签页
+    const openedIndex = openedFiles.value.findIndex(f => f.id === item.id)
+    if (openedIndex !== -1) {
+      const isActive = activeTabId.value === item.id?.toString()
+      openedFiles.value.splice(openedIndex, 1)
+
+      // 如果删除的是当前激活的标签页，切换到其他标签页
+      if (isActive) {
+        if (openedFiles.value.length > 0) {
+          const newIndex = Math.min(openedIndex, openedFiles.value.length - 1)
+          activeTabId.value = openedFiles.value[newIndex].id!.toString()
+        } else {
+          activeTabId.value = null
+        }
+      }
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除失败:', error)
+      message.error('删除失败：' + (error as Error).message)
+    }
+  } finally {
+    hideContextMenu()
+  }
+}
+
+// 移动文件
+const handleMove = () => {
+  const item = contextMenuTarget.value
+  if (!item) return
+
+  targetFolderId.value = item.parentId || 0 // 重置为目标目录为当前文件的父目录
+  moveDialogVisible.value = true
+  hideContextMenu()
+}
+
+// 确认移动文件
+const confirmMove = async () => {
+  const item = contextMenuTarget.value
+  if (!item) return
+
+  try {
+    // 修复移动文件功能，确保正确传递参数
+    await moveFile(item.id!, targetFolderId.value)
+    message.success('移动成功')
+    await refreshFileTree()
+    moveDialogVisible.value = false
+  } catch (error) {
+    console.error('移动失败:', error)
+    message.error('移动失败')
+  }
+}
+
+// 保存处理
+const handleSave = async () => {
+  if (!activeTabId.value) {
+    message.warning('请先选择文件')
+    return
+  }
+
+  const currentFile = openedFiles.value.find(f => f.id?.toString() === activeTabId.value)
+  if (!currentFile) {
+    message.warning('未找到要保存的文件')
+    return
+  }
+
+  try {
+    await saveFileContent(currentFile.id!, currentFile.content)
+    currentFile.isDirty = false
+    message.success('保存成功')
+  } catch (error) {
+    console.error('保存失败:', error)
+    message.error('保存失败')
+  }
+}
 
 // 编辑器配置
 const editorOptions = {
@@ -228,638 +552,133 @@ const editorOptions = {
   smoothScrolling: true
 }
 
-// 项目树数据
-const projectTree = ref([
-  {
-    id: 1,
-    label: '示例项目',
-    type: 'project',
-    children: [
-      {
-        id: 2,
-        label: 'SQL 任务',
-        type: 'folder',
-        children: [
-          { id: 3, label: '示例任务.sql', type: 'file' },
-          { id: 6, label: '数据分析.sql', type: 'file' },
-          { id: 7, label: 'ETL处理.sql', type: 'file' }
-        ]
-      },
-      {
-        id: 4,
-        label: '配置文件',
-        type: 'folder',
-        children: [
-          { id: 5, label: 'flink-conf.yaml', type: 'file' },
-          { id: 8, label: 'log4j.properties', type: 'file' }
-        ]
-      },
-      {
-        id: 9,
-        label: '数据字典',
-        type: 'folder',
-        children: [
-          { id: 10, label: 'user-dict.json', type: 'file' },
-          { id: 11, label: 'status-dict.csv', type: 'file' }
-        ]
-      }
-    ]
-  },
-  {
-    id: 12,
-    label: '数据处理项目',
-    type: 'project',
-    children: [
-      {
-        id: 13,
-        label: '实时计算',
-        type: 'folder',
-        children: [
-          { id: 14, label: '实时统计.sql', type: 'file' },
-          { id: 15, label: '告警检测.sql', type: 'file' }
-        ]
-      }
-    ]
-  }
-])
-
 // 树配置
 const treeProps = {
   children: 'children',
-  label: 'label'
+  label: 'name'
 }
 
-// 获取节点类型标签
-const getNodeTypeLabel = (type: string) => {
-  const typeMap = {
-    'project': '项目',
-    'folder': '文件夹',
-    'file': '文件'
-  }
-  return typeMap[type] || type
-}
-
-// 获取节点描述
-const getNodeDescription = (type: string) => {
-  const descMap = {
-    'project': 'Flink SQL 项目，用于组织和管理数据开发任务',
-    'folder': '文件夹，用于分类管理相关文件',
-    'file': 'SQL 脚本文件，包含 Flink SQL 处理逻辑'
-  }
-  return descMap[type] || ''
-}
-
-// 获取节点标签类型
-const getNodeTagType = (type: string) => {
-  const typeMap = {
-    'project': 'primary',
-    'folder': 'success',
-    'file': 'info'
-  }
-  return typeMap[type] || 'info'
-}
-
-// 根据文件名获取语言类型
-const getFileLanguage = (filename: string) => {
-  const ext = filename.split('.').pop()?.toLowerCase()
-  const languageMap: Record<string, string> = {
-    'sql': 'sql',
-    'py': 'python',
-    'java': 'java',
-    'js': 'javascript',
-    'ts': 'typescript',
-    'json': 'json',
-    'xml': 'xml',
-    'yaml': 'yaml',
-    'yml': 'yaml',
-    'md': 'plaintext',
-    'txt': 'plaintext',
-    'properties': 'properties',
-    'sh': 'shell'
-  }
-  return languageMap[ext || ''] || 'plaintext'
-}
-
-// 事件处理
-const handleCreateProject = () => {
-  ElMessage.info('创建项目功能开发中...')
-}
-
-const handleImportProject = () => {
-  ElMessage.info('导入项目功能开发中...')
-}
-
-const handleRefresh = () => {
-  ElMessage.success('项目列表已刷新')
-}
-
-const handleEditProject = () => {
-  if (!selectedNode.value) {
-    ElMessage.warning('请先选择一个项目')
-    return
-  }
-  ElMessage.info(`编辑 ${selectedNode.value.label} 功能开发中...`)
-}
-
-const handleDeleteProject = () => {
-  if (!selectedNode.value) {
-    ElMessage.warning('请先选择一个项目')
-    return
-  }
-  ElMessage.warning(`删除 ${selectedNode.value.label} 功能开发中...`)
-}
-
-const handleNodeClick = (data: any) => {
-  selectedNode.value = data
-  console.log('节点点击:', data)
-
-  // 如果是文件，打开编辑器标签页
-  if (data.type === 'file') {
-    openEditorTab(data)
-  }
-}
-
-// 打开编辑器标签页
-const openEditorTab = (node: any) => {
-  const existingTab = editorTabs.value.find(tab => tab.id === node.id.toString())
-
-  if (existingTab) {
-    // 如果标签页已存在，激活它
-    activeTab.value = existingTab.id
-  } else {
-    // 创建新的标签页
-    const newTab = {
-      id: node.id.toString(),
-      label: node.label,
-      content: getFileContent(node),
-      node: node
-    }
-    editorTabs.value.push(newTab)
-    activeTab.value = newTab.id
-  }
-}
-
-// 获取文件内容（模拟数据）
-const getFileContent = (node: any) => {
-  // 这里应该从API获取文件内容，现在使用模拟数据
-  const contentMap: Record<string, string> = {
-    '3': `-- 示例 Flink SQL 任务
--- 创建数据源表
-CREATE TABLE source_table (
-    id INT,
-    name STRING,
-    age INT,
-    event_time TIMESTAMP(3),
-    WATERMARK FOR event_time AS event_time - INTERVAL '5' SECOND
-) WITH (
-    'connector' = 'datagen',
-    'rows-per-second' = '10'
-);
-
--- 创建结果表
-CREATE TABLE sink_table (
-    name STRING,
-    avg_age DOUBLE
-) WITH (
-    'connector' = 'print'
-);
-
--- 执行数据处理
-INSERT INTO sink_table
-SELECT
-    name,
-    AVG(age) as avg_age
-FROM source_table
-GROUP BY name;`,
-    '6': `-- 数据分析任务
--- 统计用户行为数据
-SELECT
-    user_id,
-    COUNT(*) as action_count,
-    AVG(duration) as avg_duration
-FROM user_actions
-WHERE event_date >= CURRENT_DATE - INTERVAL '7' DAY
-GROUP BY user_id
-ORDER BY action_count DESC;`,
-    '7': `-- ETL 处理任务
--- 数据清洗和转换
-WITH cleaned_data AS (
-    SELECT
-        user_id,
-        TRIM(username) as username,
-        CASE
-            WHEN age < 0 THEN NULL
-            WHEN age > 120 THEN NULL
-            ELSE age
-        END as age,
-        event_time
-    FROM raw_user_data
-    WHERE user_id IS NOT NULL
-)
-SELECT * FROM cleaned_data;`,
-    '14': `-- 实时统计任务
--- 实时计算用户活跃度
-SELECT
-    window_start,
-    window_end,
-    COUNT(DISTINCT user_id) as active_users,
-    SUM(amount) as total_amount
-FROM TABLE(
-    TUMBLE(TABLE user_transactions, DESCRIPTOR(event_time), INTERVAL '1' HOUR)
-)
-GROUP BY window_start, window_end;`,
-    '15': `-- 告警检测任务
--- 监控异常交易
-SELECT
-    user_id,
-    COUNT(*) as suspicious_count,
-    MAX(amount) as max_amount
-FROM transactions
-WHERE amount > 10000
-    AND transaction_time >= CURRENT_TIMESTAMP - INTERVAL '1' HOUR
-GROUP BY user_id
-HAVING COUNT(*) > 3;`
+// 搜索过滤函数
+const filterTreeNodes = (node: FileManageVO, keyword: string): FileManageVO | null => {
+  if (!keyword) {
+    return node
   }
 
-  return contentMap[node.id] || `-- ${node.label}
--- 文件内容加载中...`
-}
+  const { name, children } = node
+  const isMatch = name.toLowerCase().includes(keyword.toLowerCase())
 
-// 编辑器内容变化
-const handleEditorChange = (tabId: string, content: string) => {
-  const tab = editorTabs.value.find(t => t.id === tabId)
-  if (tab) {
-    tab.content = content
-  }
-}
+  if (children && children.length > 0) {
+    const filteredChildren = children
+      .map(child => filterTreeNodes(child, keyword))
+      .filter(child => child !== null) as FileManageVO[]
 
-// 移除标签页
-const handleTabRemove = (tabId: string) => {
-  const index = editorTabs.value.findIndex(tab => tab.id === tabId)
-  if (index !== -1) {
-    editorTabs.value.splice(index, 1)
-    // 如果移除的是当前激活的标签页，激活下一个标签页
-    if (activeTab.value === tabId) {
-      activeTab.value = editorTabs.value.length > 0 ? editorTabs.value[0].id : ''
+    if (filteredChildren.length > 0) {
+      // 对过滤后的子节点应用排序
+      return {
+        ...node,
+        children: sortFileTreeData(filteredChildren)
+      }
     }
   }
+
+  return isMatch ? node : null
 }
 
-// IDE 工具栏事件
-const handleExecute = () => {
-  if (!selectedNode.value) return
-  ElMessage.success(`执行任务: ${selectedNode.value.label}`)
-}
-
-const handleDebug = () => {
-  if (!selectedNode.value) return
-  ElMessage.info(`调试任务: ${selectedNode.value.label}`)
-}
-
-const handleStop = () => {
-  if (!selectedNode.value) return
-  ElMessage.warning(`停止任务: ${selectedNode.value.label}`)
-}
-
-const handleNewFile = () => {
-  ElMessage.info('新建文件功能开发中...')
-}
-
-const handleNewFolder = () => {
-  ElMessage.info('新建文件夹功能开发中...')
-}
-
-// 右键点击处理
-const handleRightClick = (event: any, data: any) => {
-  event.preventDefault()
-  contextMenuNode.value = data
-  contextMenuX.value = event.clientX
-  contextMenuY.value = event.clientY
-
-  // 计算菜单位置，避免超出屏幕
-  const menuWidth = 150
-  const menuHeight = 120
-  const screenWidth = window.innerWidth
-  const screenHeight = window.innerHeight
-
-  let left = event.clientX
-  let top = event.clientY
-
-  if (left + menuWidth > screenWidth) {
-    left = screenWidth - menuWidth - 10
+// 过滤后的文件树数据
+const filteredFileTreeData = computed(() => {
+  if (!searchKeyword.value) {
+    return fileTreeData.value
   }
-
-  if (top + menuHeight > screenHeight) {
-    top = screenHeight - menuHeight - 10
-  }
-
-  contextMenuStyle.value = {
-    position: 'fixed',
-    left: `${left}px`,
-    top: `${top}px`,
-    zIndex: 9999
-  }
-
-  contextMenuVisible.value = true
-}
-
-// 处理右键菜单操作
-const handleContextMenuAction = (action: string) => {
-  if (!contextMenuNode.value) return
-
-  switch (action) {
-    case 'new-folder':
-      ElMessage.success(`在 ${contextMenuNode.value.label} 下新建文件夹`)
-      break
-    case 'new-file':
-      ElMessage.success(`在 ${contextMenuNode.value.label} 下新建文件`)
-      break
-    case 'delete':
-      ElMessage.warning(`删除 ${contextMenuNode.value.label}`)
-      break
-  }
-
-  contextMenuVisible.value = false
-  contextMenuNode.value = null
-}
-
-// 点击其他地方关闭右键菜单
-const handleClickOutside = () => {
-  contextMenuVisible.value = false
-  contextMenuNode.value = null
-}
-
-// 节点过滤
-const filterNode = (value: string, data: any) => {
-  if (!value) return true
-  return data.label.toLowerCase().includes(value.toLowerCase())
-}
-
-// 监听搜索文本变化并应用过滤
-watch(searchText, (val) => {
-  nextTick(() => {
-    if (treeRef.value) {
-      treeRef.value.filter(val)
-    }
-  })
+  const filtered = fileTreeData.value
+    .map(node => filterTreeNodes(node, searchKeyword.value))
+    .filter(node => node !== null) as FileManageVO[]
+  // 对根节点应用排序
+  return sortFileTreeData(filtered)
 })
 
-// 监听右键菜单状态，点击外部关闭
-watch(contextMenuVisible, (val) => {
-  if (val) {
-    document.addEventListener('click', handleClickOutside)
-  } else {
-    document.removeEventListener('click', handleClickOutside)
+// 搜索处理
+const handleSearch = () => {
+  // 搜索逻辑已在 computed 中处理
+}
+
+// 节点点击处理
+const handleNodeClick = (data: FileManageVO) => {
+  if (data.type !== 'folder') {
+    // 检查文件是否已经打开
+    const existingFile = openedFiles.value.find(f => f.id === data.id)
+    if (existingFile) {
+      // 如果文件已存在，切换到该标签页
+      activeTabId.value = data.id!.toString()
+    } else {
+      // 如果文件不存在，加载并添加为新标签页
+      loadFileContent(data)
+    }
   }
+}
+
+// 关闭标签页
+const handleRemoveTab = (tabId: string) => {
+  const index = openedFiles.value.findIndex(f => f.id?.toString() === tabId)
+  if (index !== -1) {
+    openedFiles.value.splice(index, 1)
+  }
+
+  // 如果关闭的是当前激活的标签页，切换到其他标签页
+  if (activeTabId.value === tabId) {
+    if (openedFiles.value.length > 0) {
+      const newIndex = Math.min(index, openedFiles.value.length - 1)
+      activeTabId.value = openedFiles.value[newIndex].id!.toString()
+    } else {
+      activeTabId.value = null
+    }
+  }
+}
+
+// 标签页点击切换
+const handleTabClick = (tab: any) => {
+  activeTabId.value = tab.paneName
+}
+
+// 内容变更处理
+const handleContentChange = (file: OpenedFile) => {
+  file.isDirty = true
+}
+
+// 组件挂载时初始化
+onMounted(async () => {
+  window.addEventListener('keydown', handleKeyboard)
+  document.addEventListener('click', handleDocumentClick)
+  // 添加ESC键关闭菜单
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      hideContextMenu()
+    }
+  })
+
+  // 加载文件树
+  await loadFileTree()
+})
+
+// 组件卸载时移除事件监听
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyboard)
+  document.removeEventListener('click', handleDocumentClick)
 })
 </script>
 
 <style lang="scss" scoped>
-.v-project-management {
-  padding: 24px;
-  height: calc(100vh - 120px);
-  overflow-y: auto;
-
-  &__header {
-    margin-bottom: 24px;
-
-    h2 {
-      margin: 0 0 8px 0;
-      color: var(--el-text-color-primary);
-      font-size: 20px;
-    }
-
-    p {
-      margin: 0;
-      color: var(--el-text-color-secondary);
-      font-size: 14px;
-    }
+/*
+ * 编辑器样式优化
+ * 使用深选择器确保Monaco编辑器正确继承高度
+ */
+:deep(.el-tabs) {
+  .el-tabs__content {
+    position: relative;
   }
 
-  &__toolbar {
-    margin-bottom: 16px;
-    display: flex;
-    gap: 8px;
-  }
-
-  &__content {
-    height: calc(100% - 120px);
-  }
-
-  &__tree {
+  .el-tab-pane {
     height: 100%;
-    border: 1px solid var(--el-border-color);
-    border-radius: 4px;
-    background: var(--el-bg-color);
-
-    &-header {
-      padding: 12px;
-      border-bottom: 1px solid var(--el-border-color);
-    }
-
-    &-content {
-      height: calc(100% - 60px);
-      overflow-y: auto;
-      padding: 8px;
-    }
-
-    &-node {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-
-      .el-icon {
-        color: var(--el-color-primary);
-      }
-    }
-  }
-
-  &__detail {
-    height: 100%;
-    border: 1px solid var(--el-border-color);
-    border-radius: 4px;
-    background: var(--el-bg-color);
-
-    &-header {
-      padding: 16px;
-      border-bottom: 1px solid var(--el-border-color);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-
-      h3 {
-        margin: 0;
-        color: var(--el-text-color-primary);
-      }
-    }
-
-    &-content {
-      padding: 16px;
-    }
-  }
-
-  &__ide {
-    height: 100%;
-    border: 1px solid var(--el-border-color);
-    border-radius: 4px;
-    background: var(--el-bg-color);
-    display: flex;
-    flex-direction: column;
-
-    &-toolbar {
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--el-border-color);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: var(--el-fill-color-light);
-
-      &-left {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-
-        .ide-title {
-          font-size: 16px;
-          font-weight: 600;
-          color: var(--el-text-color-primary);
-        }
-      }
-
-      &-right {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-    }
-
-    &-content {
-      flex: 1;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-    }
-  }
-
-  &__editor-container {
-    flex: 1;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-
-    &-tabs {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-
-      :deep(.el-tabs) {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-
-        .el-tabs__header {
-          margin: 0;
-        }
-
-        .el-tabs__content {
-          flex: 1;
-          padding: 0;
-          height: 100%;
-
-          .el-tab-pane {
-            height: 100%;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-          }
-        }
-      }
-    }
-
-    .editor-wrapper {
-      flex: 1;
-      height: 100%;
-      width: 100%;
-    }
-  }
-
-  &__node-detail {
-    padding: 24px;
-  }
-
-  &__welcome {
-    padding: 40px 24px;
-    text-align: center;
-
-    .welcome-tips {
-      margin-top: 24px;
-      max-width: 500px;
-      margin: 24px auto 0;
-
-      h3 {
-        margin: 0 0 16px 0;
-        color: var(--el-text-color-primary);
-        font-size: 18px;
-      }
-
-      ul {
-        text-align: left;
-        margin: 0;
-        padding-left: 20px;
-
-        li {
-          margin-bottom: 8px;
-          color: var(--el-text-color-secondary);
-          line-height: 1.5;
-        }
-      }
-    }
-  }
-}
-
-// 右键菜单样式
-:deep(.v-project-management__context-menu) {
-  .el-dialog__header,
-  .el-dialog__body {
-    display: none;
-  }
-}
-
-.context-menu-content {
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color);
-  border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  padding: 4px 0;
-}
-
-.context-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--el-text-color-primary);
-  transition: background-color 0.2s;
-
-  &:hover {
-    background-color: var(--el-color-primary-light-9);
-  }
-
-  &.danger {
-    color: var(--el-color-danger);
-
-    &:hover {
-      background-color: var(--el-color-danger-light-9);
-    }
-  }
-
-  .el-icon {
-    font-size: 16px;
-    color: var(--el-text-color-secondary);
+    position: relative;
   }
 }
 </style>

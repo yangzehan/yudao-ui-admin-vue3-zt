@@ -36,6 +36,7 @@ const emit = defineEmits<{
 
 const editorContainer = ref<HTMLElement>()
 let editor: monaco.editor.IStandaloneCodeEditor | null = null
+let keydownHandler: ((e: KeyboardEvent) => void) | null = null
 
 // 初始化编辑器
 const initEditor = () => {
@@ -101,6 +102,51 @@ const initEditor = () => {
   editor.onDidChangeCursorSelection((e) => {
     emit('selectionChange', e)
   })
+
+  // 添加键盘快捷键处理 - Ctrl+W 选中当前单词
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyE, () => {
+    const position = editor.getPosition()
+    if (!position) return
+
+    const model = editor.getModel()
+    if (!model) return
+
+    const lineContent = model.getLineContent(position.lineNumber)
+
+    // 定义单词字符的正则表达式（包含字母、数字、下划线）
+    const wordRegex = /[a-zA-Z0-9_]/
+
+    // 向前查找单词开始位置
+    let startColumn = position.column
+    while (startColumn > 1 && wordRegex.test(lineContent[startColumn - 2])) {
+      startColumn--
+    }
+
+    // 向后查找单词结束位置
+    let endColumn = position.column
+    while (endColumn <= lineContent.length && wordRegex.test(lineContent[endColumn - 1])) {
+      endColumn++
+    }
+
+    // 如果找到了有效的单词范围，则选中它
+    if (endColumn > startColumn) {
+      editor.setSelection({
+        startLineNumber: position.lineNumber,
+        startColumn: startColumn,
+        endLineNumber: position.lineNumber,
+        endColumn: endColumn
+      })
+    }
+  })
+
+  // 监听DOM键盘事件，确保Ctrl+W不会关闭浏览器标签页
+  keydownHandler = (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+  }
+  editorContainer.value?.addEventListener('keydown', keydownHandler)
 }
 
 // 更新编辑器内容
@@ -167,6 +213,10 @@ onUnmounted(() => {
   if (editor) {
     editor.dispose()
     editor = null
+  }
+  if (editorContainer.value && keydownHandler) {
+    editorContainer.value.removeEventListener('keydown', keydownHandler)
+    keydownHandler = null
   }
 })
 
