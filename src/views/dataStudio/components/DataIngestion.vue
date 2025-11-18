@@ -33,9 +33,9 @@
                 @contextmenu.prevent="handleNodeContextMenu($event, data)"
               >
                 <el-icon v-if="data.type === 'folder'" class="text-[var(--el-color-primary)]"><FolderOpened /></el-icon>
-                <el-icon v-else-if="data.type === 'sql'" class="text-[var(--el-color-primary)]"><Document /></el-icon>
+                <el-icon v-else-if="data.type === 'yaml'" class="text-[var(--el-color-primary)]"><Document /></el-icon>
                 <el-icon v-else class="text-[var(--el-color-primary)]"><FileText /></el-icon>
-                <span>{{ data.name }}</span>
+                <span>{{ hideFileExtension(data.name, data.type) }}</span>
               </div>
             </template>
           </el-tree>
@@ -83,11 +83,11 @@
       <el-splitter-panel :min="400" class="flex flex-col bg-[var(--el-bg-color)]">
         <!-- 编辑器工具栏 -->
         <div class="flex-shrink-0 px-16px py-12px border-b border-[var(--el-border-color)] bg-[var(--el-fill-color-light)] flex justify-end items-center gap-8px">
-          <el-button type="primary" size="small" icon="VideoPlay">
-            运行
+          <el-button type="primary" size="small" icon="Upload">
+            导入
           </el-button>
-          <el-button type="warning" size="small" icon="Connection">
-            调试
+          <el-button type="warning" size="small" icon="Refresh">
+            刷新
           </el-button>
           <el-button ref="saveButtonRef" type="success" size="small" icon="DocumentChecked" @click="handleSave">
             保存
@@ -107,13 +107,13 @@
               <el-tab-pane
                 v-for="file in openedFiles"
                 :key="file.id"
-                :label="file.name + (file.isDirty ? ' •' : '')"
+                :label="hideFileExtension(file.name, file.type) + (file.isDirty ? ' •' : '')"
                 :name="file.id!.toString()"
               >
                 <div class="absolute inset-0 overflow-hidden">
                   <MonacoEditor
                     v-model="file.content"
-                    language="sql"
+                    language="yaml"
                     :height="'100%'"
                     :options="editorOptions"
                     @change="handleContentChange(file)"
@@ -172,16 +172,17 @@ import { Search } from '@element-plus/icons-vue'
 import { Document, EditPen, Delete, Rank, FolderOpened, Close } from '@element-plus/icons-vue'
 import { ElSelect } from 'element-plus'
 import {
-  getFileTree,
-  createFile,
-  deleteFile,
-  renameFile,
-  moveFile,
-  getFileContent,
-  saveFileContent,
-  generateFilePath,
-  getFileType, FileManageVO
-} from '@/api/dataStudio/file'
+  getDataIngestionTree as getFileTree,
+  createDataIngestion as createFile,
+  deleteDataIngestion as deleteFile,
+  renameDataIngestion as renameFile,
+  moveDataIngestion as moveFile,
+  getDataIngestionContent as getFileContent,
+  saveDataIngestionContent as saveFileContent,
+  generateDataIngestionPath as generateFilePath,
+  getDataIngestionFileType as getFileType,
+  DataIngestionVO as FileManageVO
+} from '@/api/dataStudio/dataIngestion'
 import { ElMessageBox } from 'element-plus'
 
 const message = useMessage() // 消息弹窗
@@ -265,7 +266,7 @@ const loadFileContent = async (file: FileManageVO) => {
     const content = await getFileContent(file.id!)
     const newFile: OpenedFile = {
       ...file,
-      content: content || `-- ${file.name}\n-- 文件内容编辑区域\nSELECT * FROM table_name;`,
+      content: content || `# ${file.name}\n# 数据摄取配置\n`,
       isDirty: false
     }
     openedFiles.value.push(newFile)
@@ -313,6 +314,14 @@ const handleDocumentClick = () => {
 
 // ==================== 工具函数 ====================
 
+// 隐藏文件扩展名（用于显示）
+const hideFileExtension = (fileName: string, type: string): string => {
+  if (type === 'yaml') {
+    return fileName.replace(/\.(yaml|yml)$/i, '')
+  }
+  return fileName
+}
+
 // 扁平化文件夹树为选项列表
 const flattenFolders = (nodes: FileManageVO[], parentPath: string = ''): { value: number; label: string }[] => {
   const result: { value: number; label: string }[] = []
@@ -342,7 +351,7 @@ const flattenFolders = (nodes: FileManageVO[], parentPath: string = ''): { value
 const handleCreateFile = async () => {
   const folder = contextMenuTarget.value
   try {
-    const { value: fileName } = await ElMessageBox.prompt('请输入文件名称', '新增文件', {
+    const { value: fileName } = await ElMessageBox.prompt('请输入YAML文件名称（无需输入.yaml扩展名）', '新增YAML文件', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       inputPattern: /.+/,
@@ -350,11 +359,13 @@ const handleCreateFile = async () => {
     })
 
     const parentId = folder?.type === 'folder' ? folder.id : folder?.parentId || 0
-    const filePath = generateFilePath(folder?.filePath || '/project', fileName)
-    const type = getFileType(fileName)
+    // 自动添加 .yaml 扩展名
+    const finalFileName = fileName.endsWith('.yaml') || fileName.endsWith('.yml') ? fileName : `${fileName}.yaml`
+    const filePath = generateFilePath(folder?.filePath || '/datastudio', finalFileName)
+    const type = 'yaml'
 
     await createFile({
-      name: fileName,
+      name: finalFileName,
       type,
       parentId,
       filePath,
@@ -386,7 +397,7 @@ const handleCreateFolder = async () => {
     })
 
     const parentId = folder.id
-    const filePath = generateFilePath(folder?.filePath || '/project', folderName)
+    const filePath = generateFilePath(folder?.filePath || '/datastudio', folderName)
 
     await createFile({
       name: folderName,
@@ -418,7 +429,7 @@ const handleRename = async () => {
     const { value: newName } = await ElMessageBox.prompt('请输入新名称', '重命名', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
-      inputValue: item.name,
+      inputValue: hideFileExtension(item.name, item.type),
       inputPattern: /.+/,
       inputErrorMessage: '名称不能为空'
     })

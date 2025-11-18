@@ -10,8 +10,8 @@
         <el-col :span="12">
           <div class="v-quick-start__card">
             <div class="v-quick-start__card-header">
-              <el-icon><Folder /></el-icon>
-              <h3>项目管理</h3>
+              <el-icon><Edit /></el-icon>
+              <h3>SQL 编辑器</h3>
             </div>
             <div class="v-quick-start__card-content">
               <p>创建和管理 Flink SQL 项目</p>
@@ -113,6 +113,7 @@
 
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
+import { Edit } from '@element-plus/icons-vue'
 
 // 事件处理
 const handleCreateProject = () => {

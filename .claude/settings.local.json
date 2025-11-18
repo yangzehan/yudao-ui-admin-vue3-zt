@@ -7,7 +7,9 @@
       "Bash(pnpm add monaco-editor @monaco-editor/vue)",
       "Bash(tree:*)",
       "Bash(npx tsc:*)",
-      "Bash(pnpm lint:eslint:*)"
+      "Bash(pnpm lint:eslint:*)",
+      "Bash(mv:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

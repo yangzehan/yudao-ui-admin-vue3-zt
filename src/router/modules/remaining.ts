@@ -768,12 +768,22 @@ const remainingRouter: AppRouteRecordRaw[] = [
         }
       },
       {
-        path: 'project',
-        component: () => import('@/views/dataStudio/components/ProjectManagement.vue'),
-        name: 'DataStudioProject2',
+        path: 'sql-edit',
+        component: () => import('@/views/dataStudio/components/SqlEditor.vue'),
+        name: 'DataStudioSqlEditor',
         meta: {
-          title: '项目管理',
-          icon: 'ep:folder',
+          title: 'SQL 编辑器',
+          icon: 'ep:edit',
+          noCache: false
+        }
+      },
+      {
+        path: 'data-ingestion',
+        component: () => import('@/views/dataStudio/components/DataIngestion.vue'),
+        name: 'DataStudioDataIngestion',
+        meta: {
+          title: '数据摄取',
+          icon: 'ep:upload',
           noCache: false
         }
       },

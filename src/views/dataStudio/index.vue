@@ -26,12 +26,12 @@
             <el-col :span="8">
               <div class="v-data-studio__feature-card">
                 <div class="v-data-studio__feature-icon">
-                  <el-icon><Folder /></el-icon>
+                  <el-icon><Edit /></el-icon>
                 </div>
-                <h3>项目管理</h3>
+                <h3>SQL 编辑器</h3>
                 <p>创建和管理 Flink SQL 项目，组织您的数据开发工作</p>
-                <el-button type="primary" @click="navigateTo('project')">
-                  管理项目
+                <el-button type="primary" @click="navigateTo('sql-edit')">
+                  打开编辑器
                 </el-button>
               </div>
             </el-col>
@@ -106,6 +106,7 @@
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { Edit } from '@element-plus/icons-vue'
 
 const router = useRouter()
 
