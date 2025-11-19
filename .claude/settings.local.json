@@ -9,7 +9,10 @@
       "Bash(npx tsc:*)",
       "Bash(pnpm lint:eslint:*)",
       "Bash(mv:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(mvnd:*)",
+      "Bash(pnpm install)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

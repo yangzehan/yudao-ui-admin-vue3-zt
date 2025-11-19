@@ -769,7 +769,7 @@ const remainingRouter: AppRouteRecordRaw[] = [
       },
       {
         path: 'sql-edit',
-        component: () => import('@/views/dataStudio/components/SqlEditor.vue'),
+        component: () => import('@/views/dataStudio/components/sqlEditor/SqlEditor.vue'),
         name: 'DataStudioSqlEditor',
         meta: {
           title: 'SQL 编辑器',

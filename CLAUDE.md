@@ -335,11 +335,6 @@ src/
 - **Content Area**: Tab-based interface for SQL tasks and configurations
 - **Status Bar**: Bottom status display
 
-#### SQL Task Component (`src/views/dataStudio/components/SqlTask.vue`)
-- **Code Editor**: SQL code editing area (simulated)
-- **Execution Toolbar**: Execute, Debug, Stop operations
-- **Configuration Panel**: Task settings, Flink environment, execution mode
-- **Result Display**: Execution results, logs, task information
 
 #### Quick Start Page (`src/views/dataStudio/components/QuickStartPage.vue`)
 - **Feature Cards**: Quick access to main DataStudio features
