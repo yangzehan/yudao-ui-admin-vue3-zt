@@ -7,6 +7,7 @@ export interface FileManageVO {
   parentId?: number
   filePath?: string
   content?: string
+  config?: FlinkConfig
   sort?: number
   fileSize?: number
   status?: number
@@ -36,9 +37,23 @@ export interface FileManageSaveReqVO {
   parentId?: number
   filePath?: string
   content?: string
-  config?: FlinkConfig
   sort?: number
   status?: number
+}
+
+export interface FileDataVO {
+  id?: number
+  name: string
+  type: 'folder' | 'sql' | 'yaml' | 'file'
+  parentId?: number
+  filePath?: string
+  content?: string
+  config?: FlinkConfig
+  sort?: number
+  fileSize?: number
+  status?: number
+  createTime?: Date
+  updateTime?: Date
 }
 
 // ==================== 文件管理 API ====================
@@ -104,13 +119,18 @@ export const saveFileContent = async (id: number, content: string): Promise<bool
 }
 
 // 保存文件数据（内容和配置）
-export const saveFileData = async (data: FileManageSaveReqVO): Promise<boolean> => {
+export const saveFileData = async (data: FileDataVO): Promise<boolean> => {
   return await request.post({ url: '/sql-edit/save-data', data })
 }
 
 // 获取文件内容
 export const getFileContent = (id: number): Promise<string> => {
   return request.get({ url: '/sql-edit/get-content', params: { id } })
+}
+
+// 获取文件数据（内容和配置）
+export const getFileData = (id: number): Promise<FileDataVO> => {
+  return request.get({ url: '/sql-edit/get-data', params: { id } })
 }
 
 // ==================== 工具方法 ====================

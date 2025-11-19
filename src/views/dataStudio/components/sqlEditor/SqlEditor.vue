@@ -96,6 +96,9 @@
               <el-button ref="saveButtonRef" type="success" size="small" icon="DocumentChecked" @click="handleSave">
                 保存
               </el-button>
+              <el-button type="info" size="small" icon="Clock" @click="handleShowVersions">
+                版本
+              </el-button>
             </div>
             <!-- 编辑器标签页和内容区 -->
             <div class="flex-1 flex flex-col overflow-hidden">
@@ -135,6 +138,7 @@
                         <ConfigPanel
                           v-if="file.activeToolbarKey === 'config'"
                           :file="file"
+                          @update:config="(newConfig) => handleConfigUpdate(file, newConfig)"
                         />
                       </el-splitter-panel>
                         <!-- 细窄的右侧导航栏 -->
@@ -197,12 +201,22 @@
     </el-dialog>
     </div>
   </ContentWrap>
+
+  <!-- 版本面板 -->
+  <VersionPanel
+    v-model="versionPanelVisible"
+    :current-file-id="activeTabId ? Number(activeTabId) : undefined"
+    :file-name="activeFile?.name"
+    :current-version="activeFile?.versionNumber"
+    @rollback="handleVersionRollback"
+  />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useMessage } from '@/hooks/web/useMessage'
 import MonacoEditor from '@/components/monaco-editor/MonacoEditor.vue'
+import VersionPanel from './components/VersionPanel.vue'
 
 import { Search } from '@element-plus/icons-vue'
 import { Document, EditPen, Delete, Rank, FolderOpened, Setting, DocumentCopy } from '@element-plus/icons-vue'
@@ -216,6 +230,7 @@ import {
   getFileContent,
   saveFileContent,
   saveFileData,
+  getFileData,
   generateFilePath,
   FileManageVO
 } from '@/api/dataStudio/file'
@@ -255,6 +270,9 @@ const contextMenuTarget = ref<any>(null)
 // 移动文件对话框状态
 const moveDialogVisible = ref(false)
 const targetFolderId = ref<number>(0)
+
+// 版本面板状态
+const versionPanelVisible = ref(false)
 
 // ==================== 工具栏状态 ====================
 
@@ -386,31 +404,10 @@ const loadFileTree = async () => {
 // 加载文件内容并添加到已打开文件列表
 const loadFileContent = async (file: FileManageVO) => {
   try {
-    const content = await getFileContent(file.id!)
-    let fileContent = content
-    let fileConfig = undefined
-
-    // 尝试解析 JSON 格式的内容（包含配置）
-    if (content) {
-      try {
-        const parsed = JSON.parse(content)
-
-        // 支持多种存储格式
-        if (parsed.content !== undefined) {
-          fileContent = parsed.content
-        } else {
-          // 兼容纯文本格式（没有config字段）
-          fileContent = content
-        }
-
-        if (parsed.config) {
-          fileConfig = mergeWithDefaultConfig(parsed.config)
-        }
-      } catch (e) {
-        // 如果解析失败，说明是纯文本内容，保持原样
-        fileContent = content
-      }
-    }
+    // 使用 getFileData 获取完整的文件信息（包含配置）
+    const fileData = await getFileData(file.id!)
+    let fileContent = fileData.content || ''
+    let fileConfig = fileData.config ? mergeWithDefaultConfig(fileData.config) : undefined
 
     // 如果没有内容，使用默认模板
     if (!fileContent) {
@@ -830,8 +827,31 @@ const handleTabClick = (tab: any) => {
   activeTabId.value = tab.paneName
 }
 
+// 显示版本面板
+const handleShowVersions = () => {
+  if (!activeTabId.value) {
+    message.warning('请先选择文件')
+    return
+  }
+  versionPanelVisible.value = true
+}
+
+// 版本回退处理
+const handleVersionRollback = async () => {
+  // 版本回退成功后，重新加载当前文件内容
+  if (activeFile.value) {
+    await loadFileData(activeFile.value.id!)
+  }
+}
+
 // 内容变更处理
 const handleContentChange = (file: OpenedFile) => {
+  file.isDirty = true
+}
+
+// 配置更新处理
+const handleConfigUpdate = (file: OpenedFile, newConfig: any) => {
+  file.config = mergeWithDefaultConfig(newConfig)
   file.isDirty = true
 }
 

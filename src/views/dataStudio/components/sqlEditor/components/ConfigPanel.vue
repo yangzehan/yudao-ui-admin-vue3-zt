@@ -14,7 +14,12 @@ const props = defineProps<{
   }
 }>()
 
-// 配置项数据
+// 定义emit事件
+const emit = defineEmits<{
+  (e: 'update:config', value: any): void
+}>()
+
+// 配置项数据 - 使用 ref
 const configData = ref({
   executionMode: 'local',
   flinkVersion: '1.16',
@@ -22,12 +27,30 @@ const configData = ref({
   checkpointInterval: 5000
 })
 
-// 监听文件配置变化，更新本地配置
+// 标记是否正在从外部同步数据（避免循环更新）
+let isSyncingFromExternal = false
+
+// 同步外部配置到本地
 watch(() => props.file?.config, (newConfig) => {
   if (newConfig) {
-    configData.value = { ...newConfig }
+    isSyncingFromExternal = true
+    configData.value = {
+      ...configData.value,
+      ...newConfig
+    }
+    // 延迟重置标志位
+    setTimeout(() => {
+      isSyncingFromExternal = false
+    }, 0)
   }
-}, { immediate: true })
+}, { immediate: true, deep: true })
+
+// 监听本地配置变化，通知父组件（排除同步操作）
+watch(configData, (newConfig) => {
+  if (!isSyncingFromExternal) {
+    emit('update:config', { ...newConfig })
+  }
+}, { deep: true })
 
 // 验证配置项
 const validateConfig = (config: typeof configData.value): boolean => {
