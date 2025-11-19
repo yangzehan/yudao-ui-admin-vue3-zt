@@ -135,7 +135,6 @@
                         <ConfigPanel
                           v-if="file.activeToolbarKey === 'config'"
                           :file="file"
-                          @save="handleConfigSave"
                         />
                       </el-splitter-panel>
                         <!-- 细窄的右侧导航栏 -->
@@ -216,6 +215,7 @@ import {
   moveFile,
   getFileContent,
   saveFileContent,
+  saveFileData,
   generateFilePath,
   FileManageVO
 } from '@/api/dataStudio/file'
@@ -274,6 +274,66 @@ const toolbarButtons = [
 
 // ==================== 任务配置数据 ====================
 
+// 默认配置
+const defaultConfig = {
+  executionMode: 'local',
+  flinkVersion: '1.16',
+  parallelism: 1,
+  checkpointInterval: 5000
+}
+
+// 配置版本（用于兼容性升级）
+const CONFIG_VERSION = '1.0'
+
+// 合并配置与默认值，确保向后兼容
+const mergeWithDefaultConfig = (userConfig: any) => {
+  if (!userConfig) {
+    return { ...defaultConfig }
+  }
+
+  return {
+    executionMode: userConfig.executionMode || defaultConfig.executionMode,
+    flinkVersion: userConfig.flinkVersion || defaultConfig.flinkVersion,
+    parallelism: userConfig.parallelism || defaultConfig.parallelism,
+    checkpointInterval: userConfig.checkpointInterval || defaultConfig.checkpointInterval
+  }
+}
+
+// 验证配置项
+const validateConfig = (config: any): boolean => {
+  // 并行度验证
+  if (config.parallelism < 1 || config.parallelism > 1000) {
+    message.warning('并行度必须在 1-1000 之间')
+    return false
+  }
+
+  // 检查点间隔验证
+  if (config.checkpointInterval < 1000) {
+    message.warning('检查点间隔不能小于 1000ms')
+    return false
+  }
+
+  if (config.checkpointInterval > 3600000) {
+    message.warning('检查点间隔不能大于 3600000ms（1小时）')
+    return false
+  }
+
+  // Flink版本验证
+  const validVersions = ['1.14', '1.15', '1.16', '1.17', '1.18']
+  if (!validVersions.includes(config.flinkVersion)) {
+    message.warning('请选择有效的Flink版本')
+    return false
+  }
+
+  // 执行模式验证
+  const validModes = ['local', 'remote', 'cluster']
+  if (!validModes.includes(config.executionMode)) {
+    message.warning('请选择有效的执行模式')
+    return false
+  }
+
+  return true
+}
 
 // ==================== 版本历史数据 ====================
 
@@ -334,11 +394,17 @@ const loadFileContent = async (file: FileManageVO) => {
     if (content) {
       try {
         const parsed = JSON.parse(content)
-        if (parsed.content) {
+
+        // 支持多种存储格式
+        if (parsed.content !== undefined) {
           fileContent = parsed.content
+        } else {
+          // 兼容纯文本格式（没有config字段）
+          fileContent = content
         }
+
         if (parsed.config) {
-          fileConfig = parsed.config
+          fileConfig = mergeWithDefaultConfig(parsed.config)
         }
       } catch (e) {
         // 如果解析失败，说明是纯文本内容，保持原样
@@ -623,13 +689,27 @@ const handleSave = async () => {
   }
 
   try {
-    // 构建保存的数据，包含内容和配置
-    const saveData = {
-      content: currentFile.content,
-      config: currentFile.config
+    // 使用当前文件的配置数据
+    const configData = currentFile.config || defaultConfig
+
+    // 验证配置
+    if (!validateConfig(configData)) {
+      return
     }
 
-    await saveFileContent(currentFile.id!, JSON.stringify(saveData))
+    // 使用新的saveFileData方法保存文件和配置
+    await saveFileData({
+      id: currentFile.id,
+      name: currentFile.name,
+      type: currentFile.type,
+      parentId: currentFile.parentId,
+      filePath: currentFile.filePath,
+      content: currentFile.content,
+      config: mergeWithDefaultConfig(configData),
+      sort: currentFile.sort,
+      status: currentFile.status
+    })
+
     currentFile.isDirty = false
     message.success('保存成功')
   } catch (error) {
@@ -768,28 +848,6 @@ const handleTabToolbarButtonClick = (file: OpenedFile, key: string) => {
     toolBarSize.value=40
   }
 }
-
-// 配置保存处理
-const handleConfigSave = async (data: any) => {
-  try {
-    const file = openedFiles.value.find(f => f.id === data.id)
-    if (!file) return
-
-    // 保存配置项到文件的 config 属性中
-    file.config = data.config
-    file.isDirty = true
-
-    // 可以选择自动保存或提示用户保存
-    // 这里我们提示用户保存
-    message.success('配置已更新，请点击保存按钮保存文件')
-  } catch (error) {
-    console.error('配置保存失败:', error)
-    message.error('配置保存失败')
-  }
-}
-
-
-
 
 
 // 组件挂载时初始化

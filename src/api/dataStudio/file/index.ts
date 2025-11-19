@@ -21,6 +21,14 @@ export interface FileManageListReqVO {
   parentId?: number
 }
 
+export interface FlinkConfig {
+  executionMode?: string
+  flinkVersion?: string
+  parallelism?: number
+  checkpointInterval?: number
+  extendedConfig?: Record<string, any>
+}
+
 export interface FileManageSaveReqVO {
   id?: number
   name: string
@@ -28,6 +36,7 @@ export interface FileManageSaveReqVO {
   parentId?: number
   filePath?: string
   content?: string
+  config?: FlinkConfig
   sort?: number
   status?: number
 }
@@ -92,6 +101,11 @@ export const renameFile = async (id: number, name: string): Promise<boolean> => 
 // 保存文件内容
 export const saveFileContent = async (id: number, content: string): Promise<boolean> => {
   return await request.post({ url: '/sql-edit/save-content', params: { id, content } })
+}
+
+// 保存文件数据（内容和配置）
+export const saveFileData = async (data: FileManageSaveReqVO): Promise<boolean> => {
+  return await request.post({ url: '/sql-edit/save-data', data })
 }
 
 // 获取文件内容
