@@ -1,5 +1,13 @@
 import request from '@/config/axios'
 
+export interface FlinkConfig {
+  executionMode?: string
+  flinkVersion?: string
+  parallelism?: number
+  checkpointInterval?: number
+  extendedConfig?: Record<string, any>
+}
+
 export interface VersionItem {
   id: number
   sqlEditId: number
@@ -12,7 +20,7 @@ export interface VersionItem {
 
 export interface VersionDetail extends VersionItem {
   content: string
-  config: any
+  config?: FlinkConfig
 }
 
 export interface VersionListReq {
@@ -52,5 +60,19 @@ export const rollbackVersion = (id: number) => {
 export const deleteVersion = (id: number) => {
   return request.delete({
     url: `/sql-edit-version/${id}`
+  })
+}
+
+// 创建版本
+export const createVersion = (data: {
+  sqlEditId: number
+  content: string
+  config?: any
+  remark?: string
+  versionType: string
+}) => {
+  return request.post<number>({
+    url: '/sql-edit-version/create',
+    data
   })
 }

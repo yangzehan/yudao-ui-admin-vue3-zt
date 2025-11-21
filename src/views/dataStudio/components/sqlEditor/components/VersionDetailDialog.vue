@@ -34,10 +34,10 @@
       </div>
 
       <!-- 脚本内容 -->
-      <div class="content-section">
+      <div class="content-section" v-if="versionDetail">
         <h4>脚本内容</h4>
         <el-input
-          v-model="versionDetail.content"
+          :model-value="versionDetail.content || ''"
           type="textarea"
           :autosize="{ minRows: 10, maxRows: 20 }"
           readonly
@@ -48,9 +48,35 @@
       <!-- 配置信息 -->
       <div class="config-section" v-if="versionDetail?.config">
         <h4>Flink配置</h4>
-        <el-card>
-          <pre class="config-json">{{ JSON.stringify(versionDetail.config, null, 2) }}</pre>
-        </el-card>
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="执行模式">
+            <el-tag type="success">{{ versionDetail.config.executionMode || 'local' }}</el-tag>
+          </el-descriptions-item>
+
+          <el-descriptions-item label="Flink版本">
+            <el-tag type="info">{{ versionDetail.config.flinkVersion || '1.16' }}</el-tag>
+          </el-descriptions-item>
+
+          <el-descriptions-item label="并行度">
+            <el-tag type="warning">{{ versionDetail.config.parallelism || 1 }}</el-tag>
+          </el-descriptions-item>
+
+          <el-descriptions-item label="检查点间隔">
+            <span>{{ (versionDetail.config.checkpointInterval || 5000) + 'ms' }}</span>
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <!-- 扩展配置项 -->
+        <div v-if="versionDetail.config.extendedConfig && Object.keys(versionDetail.config.extendedConfig).length > 0" class="extended-config">
+          <h4>扩展配置</h4>
+          <el-descriptions :column="2" border>
+            <template v-for="(value, key) in versionDetail.config.extendedConfig" :key="key">
+              <el-descriptions-item :label="formatConfigKey(key)">
+                <span>{{ formatConfigValue(value) }}</span>
+              </el-descriptions-item>
+            </template>
+          </el-descriptions>
+        </div>
       </div>
     </div>
 
@@ -78,10 +104,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, defineExpose } from 'vue'
-import { ElMessage } from 'element-plus'
-import { formatTime } from '@/utils'
-import { getVersionDetail, type VersionDetail } from '@/api/dataStudio/version'
+import {defineExpose, ref, watch, onUnmounted} from 'vue'
+import {ElMessage} from 'element-plus'
+import {formatTime} from '@/utils'
+import {getVersionDetail, type VersionDetail} from '@/api/dataStudio/version'
 import RollbackConfirmDialog from './RollbackConfirmDialog.vue'
 
 // Props
@@ -102,15 +128,17 @@ const emit = defineEmits<{
 
 // 响应式数据
 const visible = ref(false)
-const versionDetail = ref<VersionDetail>()
+const versionDetail = ref<VersionDetail>({} as VersionDetail)
 const loading = ref(false)
 const rollbackLoading = ref(false)
 const rollbackDialogVisible = ref(false)
+const isUnmounted = ref(false)
 
 // 监听 visible 变化
 watch(
   () => props.modelValue,
   (val) => {
+    console.log("visible变化")
     visible.value = val
     if (val && props.versionId) {
       loadVersionDetail()
@@ -124,18 +152,37 @@ watch(visible, (val) => {
   emit('update:modelValue', val)
 })
 
+// 监听 versionId 变化，加载详情
+watch(
+  () => props.versionId,
+  (newVal) => {
+    if (newVal && visible.value) {
+      loadVersionDetail()
+    }
+  }
+)
+
 // 加载版本详情
 const loadVersionDetail = async () => {
-  if (!props.versionId) return
+  if (!props.versionId || !visible.value || isUnmounted.value) return
 
   loading.value = true
   try {
-    const resp = await getVersionDetail(props.versionId)
-    versionDetail.value = resp
+    const detail = await getVersionDetail(props.versionId)
+    // 确保组件未卸载且仍然可见
+    if (!isUnmounted.value && visible.value) {
+      versionDetail.value = detail
+    }
   } catch (error: any) {
-    ElMessage.error(error.message || '获取版本详情失败')
+    // 确保组件未卸载才显示错误
+    if (!isUnmounted.value && visible.value) {
+      ElMessage.error(error.message || '获取版本详情失败')
+    }
   } finally {
-    loading.value = false
+    // 确保组件未卸载才更新 loading 状态
+    if (!isUnmounted.value) {
+      loading.value = false
+    }
   }
 }
 
@@ -176,6 +223,45 @@ defineExpose({
     visible.value = true
   }
 })
+
+// 组件卸载时设置标志，防止异步更新
+onUnmounted(() => {
+  isUnmounted.value = true
+})
+
+// 格式化配置项的键名
+const formatConfigKey = (key: string): string => {
+  // 将驼峰命名转换为中文描述
+  const keyMap: Record<string, string> = {
+    'restartStrategy': '重启策略',
+    'checkpointingMode': '检查点模式',
+    'checkpointTimeout': '检查点超时',
+    'minPauseBetweenCheckpoints': '检查点最小间隔',
+    'maxConcurrentCheckpoints': '最大并发检查点数',
+    'restartAttempts': '重启次数',
+    'delayInterval': '重启延迟间隔',
+    'stateBackend': '状态后端',
+    'checkpointStorage': '检查点存储',
+    'sqlDialect': 'SQL方言',
+    'jobName': '任务名称',
+    'description': '任务描述'
+  }
+  return keyMap[key] || key
+}
+
+// 格式化配置项的值
+const formatConfigValue = (value: any): string => {
+  if (value === null || value === undefined) {
+    return '-'
+  }
+  if (typeof value === 'boolean') {
+    return value ? '是' : '否'
+  }
+  if (typeof value === 'object') {
+    return JSON.stringify(value)
+  }
+  return String(value)
+}
 </script>
 
 <style scoped>
@@ -200,15 +286,25 @@ defineExpose({
   font-weight: 600;
 }
 
-.config-json {
-  margin: 0;
-  padding: 10px;
-  background-color: #f5f7fa;
-  border-radius: 4px;
-  font-size: 12px;
-  font-family: Monaco, Consolas, 'Courier New', monospace;
-  max-height: 300px;
-  overflow-y: auto;
+.config-section {
+  margin-top: 20px;
+}
+
+.config-section h4 {
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.extended-config {
+  margin-top: 20px;
+}
+
+.extended-config h4 {
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
 }
 
 .dialog-footer {

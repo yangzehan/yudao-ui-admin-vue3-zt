@@ -21,6 +21,10 @@ export default ({command, mode}: ConfigEnv): UserConfig => {
         env = loadEnv(mode, root)
     }
     return {
+        define: {
+            // 关闭 Vue 的一些不必要的警告
+            __VUE_PROD_DEVTOOLS__: false,
+        },
         base: env.VITE_BASE_PATH,
         root: root,
         // 服务端渲染
@@ -40,6 +44,14 @@ export default ({command, mode}: ConfigEnv): UserConfig => {
         },
         // 项目使用的vite插件。 单独提取到build/vite/plugin中管理
         plugins: createVitePlugins(),
+        // Monaco Editor Worker 配置
+        optimizeDeps: {
+            include: [
+                ...include,
+                'monaco-editor'
+            ],
+            exclude
+        },
         css: {
             preprocessorOptions: {
                 scss: {
@@ -79,10 +91,10 @@ export default ({command, mode}: ConfigEnv): UserConfig => {
                       echarts: ['echarts'], // 将 echarts 单独打包，参考 https://gitee.com/yudaocode/yudao-ui-admin-vue3/issues/IAB1SX 讨论
                       'form-create': ['@form-create/element-ui'], // 参考 https://github.com/yudaocode/yudao-ui-admin-vue3/issues/148 讨论
                       'form-designer': ['@form-create/designer'],
+                      monaco: ['monaco-editor']
                     }
                 },
             },
-        },
-        optimizeDeps: {include, exclude}
+        }
     }
 }

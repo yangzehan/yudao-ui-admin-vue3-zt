@@ -37,6 +37,16 @@ import App from './App.vue'
 
 import './permission'
 
+// // 过滤 Element Plus 的 slot 警告
+// const originalWarn = console.warn
+// console.warn = (...args: any[]) => {
+//   const message = args[0]?.toString?.() || ''
+//   if (message.includes('Slot "default" invoked outside of the render function')) {
+//     return
+//   }
+//   originalWarn.apply(console, args)
+// }
+
 import '@/plugins/tongji' // 百度统计
 import Logger from '@/utils/Logger'
 

@@ -34,7 +34,7 @@
               >
                 <el-icon v-if="data.type === 'folder'" class="text-[var(--el-color-primary)]"><FolderOpened /></el-icon>
                 <el-icon v-else-if="data.type === 'sql'" class="text-[var(--el-color-primary)]"><Document /></el-icon>
-                <el-icon v-else class="text-[var(--el-color-primary)]"><FileText /></el-icon>
+                <el-icon v-else class="text-[var(--el-color-primary)]"><Document /></el-icon>
                 <span>{{ hideFileExtension(data.name, data.type) }}</span>
               </div>
             </template>
@@ -95,9 +95,6 @@
               </el-button>
               <el-button ref="saveButtonRef" type="success" size="small" icon="DocumentChecked" @click="handleSave">
                 保存
-              </el-button>
-              <el-button type="info" size="small" icon="Clock" @click="handleShowVersions">
-                版本
               </el-button>
             </div>
             <!-- 编辑器标签页和内容区 -->
@@ -207,13 +204,13 @@
     v-model="versionPanelVisible"
     :current-file-id="activeTabId ? Number(activeTabId) : undefined"
     :file-name="activeFile?.name"
-    :current-version="activeFile?.versionNumber"
     @rollback="handleVersionRollback"
+    @deleted="handleVersionDeleted"
   />
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useMessage } from '@/hooks/web/useMessage'
 import MonacoEditor from '@/components/monaco-editor/MonacoEditor.vue'
 import VersionPanel from './components/VersionPanel.vue'
@@ -234,6 +231,7 @@ import {
   generateFilePath,
   FileManageVO
 } from '@/api/dataStudio/file'
+import { getVersionList, VersionItem } from '@/api/dataStudio/version'
 import { ElMessageBox } from 'element-plus'
 import ConfigPanel from './components/ConfigPanel.vue'
 
@@ -273,6 +271,9 @@ const targetFolderId = ref<number>(0)
 
 // 版本面板状态
 const versionPanelVisible = ref(false)
+
+// 版本数据
+const versionList = ref<VersionItem[]>([])
 
 // ==================== 工具栏状态 ====================
 
@@ -432,6 +433,22 @@ const loadFileContent = async (file: FileManageVO) => {
 // 刷新文件树
 const refreshFileTree = async () => {
   await loadFileTree()
+}
+
+// 加载版本列表
+const loadVersionList = async (fileId: number) => {
+  try {
+    console.log(fileId)
+    const data = await getVersionList({
+      sqlEditId: fileId,
+      current: 1,
+      pageSize: 20
+    })
+    versionList.value = data.list || []
+  } catch (error) {
+    console.error('加载版本列表失败:', error)
+    message.error('加载版本列表失败')
+  }
 }
 
 // ==================== 事件处理 ====================
@@ -780,7 +797,7 @@ const filteredFileTreeData = computed(() => {
 })
 
 // 获取当前文件
-const currentFile = computed(() => {
+const activeFile = computed(() => {
   return openedFiles.value.find(f => f.id?.toString() === activeTabId.value) || null
 })
 
@@ -827,20 +844,52 @@ const handleTabClick = (tab: any) => {
   activeTabId.value = tab.paneName
 }
 
-// 显示版本面板
-const handleShowVersions = () => {
-  if (!activeTabId.value) {
-    message.warning('请先选择文件')
-    return
-  }
-  versionPanelVisible.value = true
-}
-
 // 版本回退处理
 const handleVersionRollback = async () => {
   // 版本回退成功后，重新加载当前文件内容
-  if (activeFile.value) {
-    await loadFileData(activeFile.value.id!)
+  if (activeFile.value && activeFile.value.id) {
+    try {
+      // 先加载文件数据
+      const fileData = await getFileData(activeFile.value.id)
+      activeFile.value.content = fileData.content || ''
+      activeFile.value.config = mergeWithDefaultConfig(fileData.config)
+      activeFile.value.isDirty = false
+
+      // 确保版本面板能获取到正确的文件ID
+      await nextTick()
+
+      // 重新加载版本列表，添加错误处理
+      if (activeFile.value.id) {
+        try {
+          await loadVersionList(activeFile.value.id)
+        } catch (versionError) {
+          console.error('加载版本列表失败:', versionError)
+          // 不阻塞主流程，版本列表加载失败不影响回退成功提示
+        }
+      }
+    } catch (error) {
+      console.error('重新加载文件失败:', error)
+      message.error('重新加载文件失败')
+    }
+  } else {
+    console.warn('回退失败：当前文件信息不完整', {
+      activeFile: activeFile.value,
+      activeTabId: activeTabId.value
+    })
+    message.warning('当前文件信息不完整，请重新打开文件')
+  }
+}
+
+// 版本删除处理
+const handleVersionDeleted = async () => {
+  // 版本删除后，重新加载版本列表
+  if (activeFile.value && activeFile.value.id) {
+    try {
+      await loadVersionList(activeFile.value.id)
+    } catch (error) {
+      console.error('加载版本列表失败:', error)
+      message.error('加载版本列表失败')
+    }
   }
 }
 
@@ -864,8 +913,25 @@ const handleTabToolbarButtonClick = (file: OpenedFile, key: string) => {
     toolBarSize.value=0
   }
   else {
+    // 如果点击的是版本按钮，先检查是否有激活的文件，然后显示版本面板
+    if (key === 'version') {
+      if (!activeTabId.value) {
+        message.warning('请先选择文件')
+        return
+      }
+      versionPanelVisible.value = true
+      return
+    }
     file.activeToolbarKey = key
     toolBarSize.value=40
+  }
+}
+
+// 处理版本面板事件
+const handleVersionPanelEvent = (eventType: string) => {
+  // 当版本面板中的版本被删除后，重新加载版本列表
+  if (eventType === 'deleted' && activeFile.value) {
+    loadVersionList(activeFile.value.id!)
   }
 }
 

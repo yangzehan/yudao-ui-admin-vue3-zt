@@ -36,10 +36,21 @@
             </div>
           </el-descriptions-item>
 
-          <el-descriptions-item label="操作说明">
+          <el-descriptions-item label="配置信息" v-if="version.config">
+            <div class="version-config">
+              <el-tag size="small" type="success">{{ version.config.executionMode || 'local' }}</el-tag>
+              <span class="config-divider">|</span>
+              <el-tag size="small" type="warning">并行度: {{ version.config.parallelism || 1 }}</el-tag>
+              <span class="config-divider">|</span>
+              <el-tag size="small" type="info">Flink: {{ version.config.flinkVersion || '1.16' }}</el-tag>
+              <div class="checkpoint-info">检查点间隔：{{ (version.config.checkpointInterval || 5000) + 'ms' }}</div>
+            </div>
+          </el-descriptions-item>
+
+          <el-descriptions-item label="操作说明" :span="2">
             <div class="rollback-desc">
               <p>1. 该版本的脚本内容将覆盖当前文件内容</p>
-              <p>2. 该版本的配置信息将覆盖当前文件配置</p>
+              <p>2. <strong>该版本的配置信息（执行模式、并行度、Flink版本等）将覆盖当前文件配置</strong></p>
               <p>3. 回退操作会创建一个新的版本记录</p>
             </div>
           </el-descriptions-item>
@@ -133,6 +144,23 @@ defineExpose({
   gap: 8px;
   font-size: 13px;
   color: #606266;
+}
+
+.version-config {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.config-divider {
+  color: var(--el-text-color-disabled);
+  font-size: 12px;
+}
+
+.checkpoint-info {
+  color: #606266;
+  font-size: 12px;
 }
 
 .rollback-desc {

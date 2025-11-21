@@ -61,7 +61,7 @@
 
           <el-table-column label="操作" width="100" fixed="right">
             <template #default="{ row }">
-              <el-button type="primary" link @click.stop="handleViewDetail(row)">
+              <el-button type="primary" link @click="handleViewDetail(row)">
                 详情
               </el-button>
             </template>
@@ -103,7 +103,6 @@ interface Props {
   modelValue: boolean
   currentFileId?: number
   fileName?: string
-  currentVersion?: string
 }
 
 const props = defineProps<Props>()
@@ -125,6 +124,12 @@ const pageSize = ref(20)
 const detailDialogVisible = ref(false)
 const selectedVersionId = ref<number>()
 
+// 计算当前版本号（从版本列表中获取）
+const currentVersion = computed(() => {
+  if (versionList.value.length === 0) return ''
+  return `v${versionList.value[0].versionNumber}`
+})
+
 // 监听 visible 变化
 watch(
   () => props.modelValue,
@@ -145,28 +150,42 @@ watch(visible, (val) => {
 // 监听当前文件变化，重新加载版本列表
 watch(
   () => props.currentFileId,
-  (newVal) => {
-    if (visible.value && newVal) {
+  (newVal, oldVal) => {
+    console.log('currentFileId 变化:', { newVal, oldVal, visible: visible.value })
+    if (visible.value && newVal && newVal !== oldVal) {
+      // 重置分页参数
+      current.value = 1
       loadVersionList()
     }
   }
 )
 
 // 加载版本列表
-const loadVersionList = async () => {
-  if (!props.currentFileId) return
+const loadVersionList = async (fileId?: number) => {
+  const targetFileId = fileId || props.currentFileId
+  if (!targetFileId) {
+    console.warn('版本列表加载失败：文件ID为空', {
+      fileId,
+      currentFileId: props.currentFileId,
+      fileName: props.fileName
+    })
+    return
+  }
 
+  console.log('开始加载版本列表:', { sqlEditId: targetFileId, fileName: props.fileName })
   loading.value = true
   try {
     const resp = await getVersionList({
-      sqlEditId: props.currentFileId,
+      sqlEditId: targetFileId,
       current: current.value,
       pageSize: pageSize.value
     })
 
-    versionList.value = resp.list
-    total.value = resp.total
+    versionList.value = resp.list || []
+    total.value = resp.total || 0
+    console.log('版本列表加载成功:', { count: versionList.value.length, total: total.value })
   } catch (error: any) {
+    console.error('版本列表加载失败:', error)
     ElMessage.error(error.message || '获取版本列表失败')
   } finally {
     loading.value = false
@@ -180,12 +199,16 @@ const handleClose = () => {
 
 // 处理刷新
 const handleRefresh = () => {
-  loadVersionList()
+  if (props.currentFileId) {
+    loadVersionList()
+  }
 }
 
 // 处理分页变化
 const handlePageChange = () => {
-  loadVersionList()
+  if (props.currentFileId) {
+    loadVersionList()
+  }
 }
 
 // 处理行点击
@@ -195,20 +218,19 @@ const handleRowClick = (row: VersionItem) => {
 
 // 处理查看详情
 const handleViewDetail = (row: VersionItem) => {
+  console.log("点击详情按钮")
   selectedVersionId.value = row.id
   detailDialogVisible.value = true
 }
 
 // 处理版本回退
 const handleRollback = () => {
-  ElMessage.success('版本回退成功')
-  loadVersionList()
   emit('rollback')
 }
 
 // 处理版本删除
 const handleVersionDeleted = () => {
-  loadVersionList()
+  emit('deleted')
 }
 
 // 暴露方法

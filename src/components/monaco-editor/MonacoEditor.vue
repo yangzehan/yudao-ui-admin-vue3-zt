@@ -9,7 +9,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as monaco from 'monaco-editor'
-
+import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
+import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
+import { language as sqlLanguage } from 'monaco-editor/esm/vs/basic-languages/sql/sql';
 
 interface Props {
   modelValue?: string
@@ -42,22 +44,15 @@ let keydownHandler: ((e: KeyboardEvent) => void) | null = null
 const initEditor = () => {
   if (!editorContainer.value) return
 
-  // 配置 Monaco Editor
+  // 配置 Monaco Editor Worker
   self.MonacoEnvironment = {
-    getWorkerUrl: function (moduleId, label) {
+    getWorker: function (moduleId, label) {
+      // 根据标签返回对应的 worker 文件路径
       if (label === 'json') {
-        return './monaco-editor/min/vs/language/json/json.worker.js'
+        return new jsonWorker()
       }
-      if (label === 'css' || label === 'scss' || label === 'less') {
-        return './monaco-editor/min/vs/language/css/css.worker.js'
-      }
-      if (label === 'html' || label === 'handlebars' || label === 'razor') {
-        return './monaco-editor/min/vs/language/html/html.worker.js'
-      }
-      if (label === 'typescript' || label === 'javascript') {
-        return './monaco-editor/min/vs/language/typescript/ts.worker.js'
-      }
-      return './monaco-editor/min/vs/editor/editor.worker.js'
+      // 默认返回编辑器 worker
+      return new editorWorker()
     }
   }
 
@@ -97,6 +92,68 @@ const initEditor = () => {
     emit('update:modelValue', value)
     emit('change', value)
   })
+
+  // 为 SQL 语言添加智能补全
+  if (props.language === 'sql') {
+    monaco.languages.registerCompletionItemProvider('sql', {
+      provideCompletionItems: (model, position) => {
+        const word = model.getWordUntilPosition(position);
+        const range = {
+          startLineNumber: position.lineNumber,
+          endLineNumber: position.lineNumber,
+          startColumn: word.startColumn,
+          endColumn: word.endColumn
+        };
+        
+        // 获取 SQL 关键字
+        const keywords = sqlLanguage.keywords || [];
+        const functions = sqlLanguage.functions || [];
+        const operators = sqlLanguage.operators || [];
+        const builtinVariables = sqlLanguage.builtinVariables || [];
+        
+        const suggestions = [
+          // 关键字建议
+          ...keywords.map(keyword => ({
+            label: keyword,
+            kind: monaco.languages.CompletionItemKind.Keyword,
+            insertText: keyword,
+            range: range,
+            detail: 'SQL 关键字'
+          })),
+          
+          // 函数建议
+          ...functions.map(func => ({
+            label: func,
+            kind: monaco.languages.CompletionItemKind.Function,
+            insertText: func + '($0)',
+            range: range,
+            detail: 'SQL 函数',
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+          })),
+          
+          // 操作符建议
+          ...operators.map(op => ({
+            label: op,
+            kind: monaco.languages.CompletionItemKind.Operator,
+            insertText: op,
+            range: range,
+            detail: 'SQL 操作符'
+          })),
+          
+          // 内置变量建议
+          ...builtinVariables.map(variable => ({
+            label: variable,
+            kind: monaco.languages.CompletionItemKind.Variable,
+            insertText: variable,
+            range: range,
+            detail: 'SQL 内置变量'
+          }))
+        ];
+        
+        return { suggestions };
+      }
+    });
+  }
 
   // 监听选择变化
   editor.onDidChangeCursorSelection((e) => {
@@ -255,9 +312,6 @@ defineExpose({
   border: 1px solid var(--el-border-color);
   border-radius: 4px;
   overflow: hidden;
-  /* 调试样式 - 临时添加边框来可视化编辑器容器 */
-  border: 2px solid blue;
-  background-color: rgba(0, 0, 255, 0.1);
 
   // 确保编辑器能够正确填充容器
   :deep(.monaco-editor) {
