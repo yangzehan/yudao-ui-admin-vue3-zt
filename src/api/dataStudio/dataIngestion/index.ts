@@ -1,5 +1,14 @@
 import request from '@/config/axios'
 
+export interface ConfigInfo {
+  type?: string
+  parentId?: number
+  filePath?: string
+  sort?: number
+  fileSize?: number
+  status?: number
+}
+
 export interface DataIngestionVO {
   id?: number
   name: string
@@ -30,6 +39,18 @@ export interface DataIngestionSaveReqVO {
   content?: string
   sort?: number
   status?: number
+}
+
+export interface DataIngestionDataSaveReqVO {
+  id?: number
+  name: string
+  type: 'folder' | 'yaml' | 'file'
+  parentId?: number
+  filePath?: string
+  content?: string
+  sort?: number
+  status?: number
+  config?: ConfigInfo
 }
 
 // ==================== 数据摄取 API ====================
@@ -92,6 +113,11 @@ export const renameDataIngestion = async (id: number, name: string): Promise<boo
 // 保存文件内容
 export const saveDataIngestionContent = async (id: number, content: string): Promise<boolean> => {
   return await request.post({ url: '/data-ingestion/save-content', params: { id, content } })
+}
+
+// 保存文件数据和配置（同时创建版本）
+export const saveDataIngestionData = async (data: DataIngestionDataSaveReqVO): Promise<boolean> => {
+  return await request.post({ url: '/data-ingestion/save-data', data })
 }
 
 // 获取文件内容

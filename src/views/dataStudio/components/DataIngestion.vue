@@ -4,7 +4,7 @@
     <div class="h-[calc(100vh-120px)] mt-16px">
       <el-splitter class="h-full">
       <!-- 左侧文件管理窗口 -->
-      <el-splitter-panel size="30%" :min="200" class="flex flex-col bg-[var(--el-bg-color)]">
+      <el-splitter-panel size="20%" :min="200" class="flex flex-col bg-[var(--el-bg-color)]">
         <!-- 文件管理头部 -->
         <div class="flex-shrink-0 px-16px py-12px border-b border-[var(--el-border-color)] bg-[var(--el-fill-color-light)]">
           <h3 class="m-0 text-14px font-600 text-[var(--el-text-color-primary)]">文件管理</h3>
@@ -79,53 +79,101 @@
         </div>
       </el-splitter-panel>
 
-      <!-- 右侧文件编辑器 -->
-      <el-splitter-panel :min="400" class="flex flex-col bg-[var(--el-bg-color)]">
-        <!-- 编辑器工具栏 -->
-        <div class="flex-shrink-0 px-16px py-12px border-b border-[var(--el-border-color)] bg-[var(--el-fill-color-light)] flex justify-end items-center gap-8px">
-          <el-button type="primary" size="small" icon="Upload">
-            导入
-          </el-button>
-          <el-button type="warning" size="small" icon="Refresh">
-            刷新
-          </el-button>
-          <el-button ref="saveButtonRef" type="success" size="small" icon="DocumentChecked" @click="handleSave">
-            保存
-          </el-button>
-        </div>
-        <!-- 编辑器标签页和内容区 -->
-        <div class="flex-1 flex flex-col overflow-hidden">
-          <template v-if="openedFiles.length > 0">
-            <el-tabs
-              v-model="activeTabId"
-              type="card"
-              closable
-              @tab-remove="handleRemoveTab"
-              @tab-click="handleTabClick"
-              class="h-full flex flex-col"
-            >
-              <el-tab-pane
-                v-for="file in openedFiles"
-                :key="file.id"
-                :label="hideFileExtension(file.name, file.type) + (file.isDirty ? ' •' : '')"
-                :name="file.id!.toString()"
+      <!-- 右侧内容区域（编辑器 + 工具栏） -->
+      <el-splitter-panel size="80%" :min="600" class="flex flex-col bg-[var(--el-bg-color)]">
+        <!-- 编辑器和工具栏的Splitter -->
+        <el-splitter class="h-full" horizontal>
+          <!-- 中间编辑器区域 -->
+          <el-splitter-panel :min="400" class="flex flex-col">
+            <!-- 编辑器工具栏 -->
+            <div class="flex-shrink-0 px-16px py-12px border-b border-[var(--el-border-color)] bg-[var(--el-fill-color-light)] flex justify-end items-center gap-8px">
+              <el-button type="primary" size="small" icon="Upload">
+                导入
+              </el-button>
+              <el-button type="warning" size="small" icon="Refresh">
+                刷新
+              </el-button>
+              <el-button
+                ref="saveButtonRef"
+                type="success"
+                size="small"
+                icon="DocumentChecked"
+                :loading="isSaving"
+                @click="handleSave"
               >
-                <div class="absolute inset-0 overflow-hidden">
-                  <MonacoEditor
-                    v-model="file.content"
-                    language="yaml"
-                    :height="'100%'"
-                    :options="editorOptions"
-                    @change="handleContentChange(file)"
-                  />
-                </div>
-              </el-tab-pane>
-            </el-tabs>
-          </template>
-          <div v-else class="flex-1 flex items-center justify-center">
-            <el-empty description="请从左侧选择文件进行编辑" />
-          </div>
-        </div>
+                保存
+              </el-button>
+            </div>
+            <!-- 编辑器标签页和内容区 -->
+            <div class="flex-1 flex flex-col overflow-hidden">
+              <template v-if="openedFiles.length > 0">
+                <el-tabs
+                  v-model="activeTabId"
+                  type="card"
+                  closable
+                  @tab-remove="handleRemoveTab"
+                  @tab-click="handleTabClick"
+                  class="h-full flex flex-col"
+                >
+                  <el-tab-pane
+                    v-for="file in openedFiles"
+                    :key="file.id"
+                    :label="hideFileExtension(file.name, file.type) + (file.isDirty ? ' •' : '')"
+                    :name="file.id!.toString()"
+                  >
+                    <el-splitter class="h-full" >
+                      <el-splitter-panel class="flex flex-col">
+                        <!-- 编辑器区域 -->
+                        <el-splitter class="h-full" horizontal>
+                          <el-splitter-panel :size="100 - toolBarSize" class="flex flex-col">
+                            <!-- 编辑器主体 -->
+                            <div class="flex-1 flex flex-col">
+                              <MonacoEditor
+                                v-model="file.content"
+                                language="yaml"
+                                :height="'100%'"
+                                :options="editorOptions"
+                                @change="handleContentChange(file)"
+                              />
+                            </div>
+                          </el-splitter-panel>
+
+                          <!-- 动态工具面板 -->
+                          <el-splitter-panel v-if="file.activeToolbarKey" :size="toolBarSize">
+                            <ConfigPanel
+                              v-if="file.activeToolbarKey === 'config'"
+                              :file="file"
+                              @update:config="(newConfig) => handleConfigUpdate(file, newConfig)"
+                            />
+                          </el-splitter-panel>
+
+                          <!-- 细窄的右侧导航栏 -->
+                          <div class="flex flex-col p-2 items-center justify-start h-full w-48 bg-[var(--el-fill-color-light)] border-l border-[var(--el-border-color)]">
+                            <div
+                              v-for="button in toolbarButtons"
+                              :key="button.key"
+                              class="flex items-center gap-2 px-3 py-2 my-1 rounded cursor-pointer hover:bg-[var(--el-fill-color-blank)] w-full transition-colors-300"
+                              :class="{ 'bg-[var(--el-color-primary-light-8)]': file.activeToolbarKey === button.key }"
+                              @click="handleTabToolbarButtonClick(file, button.key)"
+                            >
+                              <el-icon :size="18">
+                                <component :is="button.icon" />
+                              </el-icon>
+                              <span class="text-[var(--el-text-color-primary)]">{{ button.label }}</span>
+                            </div>
+                          </div>
+                        </el-splitter>
+                      </el-splitter-panel>
+                    </el-splitter>
+                  </el-tab-pane>
+                </el-tabs>
+              </template>
+              <div v-else class="flex-1 flex items-center justify-center">
+                <el-empty description="请从左侧选择文件进行编辑" />
+              </div>
+            </div>
+          </el-splitter-panel>
+        </el-splitter>
       </el-splitter-panel>
     </el-splitter>
 
@@ -159,6 +207,14 @@
         <el-button type="primary" @click="confirmMove">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 版本面板 -->
+    <VersionPanel
+      v-model="versionPanelVisible"
+      :current-file-id="activeTabId ? Number(activeTabId) : undefined"
+      :file-name="(openedFiles.find(f => f.id?.toString() === activeTabId) as OpenedFile | undefined)?.name"
+      @rollback="handleVersionRollback"
+    />
     </div>
   </ContentWrap>
 </template>
@@ -168,8 +224,8 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useMessage } from '@/hooks/web/useMessage'
 import MonacoEditor from '@/components/monaco-editor/MonacoEditor.vue'
 
-import { Search } from '@element-plus/icons-vue'
-import { Document, EditPen, Delete, Rank, FolderOpened, Close } from '@element-plus/icons-vue'
+import { Search, Clock } from '@element-plus/icons-vue'
+import { Document, EditPen, Delete, Rank, FolderOpened, Close, Setting } from '@element-plus/icons-vue'
 import { ElSelect } from 'element-plus'
 import {
   getDataIngestionTree as getFileTree,
@@ -179,11 +235,16 @@ import {
   moveDataIngestion as moveFile,
   getDataIngestionContent as getFileContent,
   saveDataIngestionContent as saveFileContent,
+  saveDataIngestionData as saveFileData,
   generateDataIngestionPath as generateFilePath,
   getDataIngestionFileType as getFileType,
-  DataIngestionVO as FileManageVO
+  DataIngestionVO as FileManageVO,
+  DataIngestionDataSaveReqVO
 } from '@/api/dataStudio/dataIngestion'
+import { createVersion } from '@/api/dataStudio/dataIngestionVersion'
 import { ElMessageBox } from 'element-plus'
+import VersionPanel from './dataIngestion/components/VersionPanel.vue'
+import ConfigPanel from './dataIngestion/components/ConfigPanel.vue'
 
 const message = useMessage() // 消息弹窗
 
@@ -196,10 +257,14 @@ const searchKeyword = ref('')
 // 保存按钮引用
 const saveButtonRef = ref()
 
+// 保存状态（防重复点击）
+const isSaving = ref(false)
+
 // 已打开的文件列表
 interface OpenedFile extends FileManageVO {
   content: string
   isDirty: boolean
+  activeToolbarKey?: string
 }
 const openedFiles = ref<OpenedFile[]>([])
 
@@ -215,6 +280,28 @@ const contextMenuTarget = ref<any>(null)
 // 移动文件对话框状态
 const moveDialogVisible = ref(false)
 const targetFolderId = ref<number>(0)
+
+// 版本面板状态
+const versionPanelVisible = ref(false)
+
+// ==================== 工具栏数据 ====================
+
+// 工具栏按钮配置
+const toolbarButtons = [
+  {
+    key: 'config',
+    label: '配置',
+    icon: Setting
+  },
+  {
+    key: 'version',
+    label: '版本',
+    icon: Clock
+  }
+]
+
+// 工具栏大小（百分比）
+const toolBarSize = ref(20)
 
 // ==================== 数据加载 ====================
 
@@ -267,7 +354,8 @@ const loadFileContent = async (file: FileManageVO) => {
     const newFile: OpenedFile = {
       ...file,
       content: content || `# ${file.name}\n# 数据摄取配置\n`,
-      isDirty: false
+      isDirty: false,
+      activeToolbarKey: undefined
     }
     openedFiles.value.push(newFile)
     activeTabId.value = file.id!.toString()
@@ -477,7 +565,8 @@ const handleDelete = async () => {
       if (isActive) {
         if (openedFiles.value.length > 0) {
           const newIndex = Math.min(openedIndex, openedFiles.value.length - 1)
-          activeTabId.value = openedFiles.value[newIndex].id!.toString()
+          const newFile = openedFiles.value[newIndex] as OpenedFile
+          activeTabId.value = newFile.id!.toString()
         } else {
           activeTabId.value = null
         }
@@ -527,6 +616,11 @@ const handleSave = async () => {
     return
   }
 
+  // 防重复点击
+  if (isSaving.value) {
+    return
+  }
+
   const currentFile = openedFiles.value.find(f => f.id?.toString() === activeTabId.value)
   if (!currentFile) {
     message.warning('未找到要保存的文件')
@@ -534,14 +628,78 @@ const handleSave = async () => {
   }
 
   try {
-    await saveFileContent(currentFile.id!, currentFile.content)
+    isSaving.value = true
+
+    // 使用统一的saveData接口，同时保存内容和创建版本
+    const config = {
+      type: currentFile.type,
+      parentId: currentFile.parentId,
+      filePath: currentFile.filePath,
+      sort: currentFile.sort,
+      fileSize: currentFile.fileSize,
+      status: currentFile.status
+    }
+
+    await saveFileData({
+      id: currentFile.id!,
+      name: currentFile.name,
+      type: currentFile.type,
+      parentId: currentFile.parentId,
+      filePath: currentFile.filePath,
+      content: currentFile.content,
+      sort: currentFile.sort,
+      status: currentFile.status,
+      config: config
+    })
+
     currentFile.isDirty = false
     message.success('保存成功')
-  } catch (error) {
+  } catch (error: any) {
     console.error('保存失败:', error)
-    message.error('保存失败')
+    message.error(error.message || '保存失败')
+  } finally {
+    isSaving.value = false
   }
 }
+
+// 版本回滚处理
+const handleVersionRollback = () => {
+  // 重新加载当前文件内容
+  const currentFile = openedFiles.value.find(f => f.id?.toString() === activeTabId.value)
+  if (currentFile) {
+    loadFileContent(currentFile)
+  }
+}
+
+// 工具栏按钮点击事件
+const handleTabToolbarButtonClick = (file: OpenedFile, key: string) => {
+  if (file.activeToolbarKey === key) {
+    // 如果点击的是当前已激活的工具栏，则关闭它
+    file.activeToolbarKey = undefined
+    toolBarSize.value = 0
+  } else {
+    // 如果点击的是版本按钮，先检查是否有激活的文件，然后显示版本面板
+    if (key === 'version') {
+      versionPanelVisible.value = true
+      return
+    }
+
+    // 否则激活对应的工具栏
+    file.activeToolbarKey = key
+    toolBarSize.value = 40
+  }
+
+  // 根据按钮key执行相应操作
+  if (key === 'version') {
+    versionPanelVisible.value = true
+  }
+}
+
+// 处理配置更新
+const handleConfigUpdate = (file: OpenedFile, newConfig: any) => {
+  file.config = newConfig
+}
+
 
 // 编辑器配置
 const editorOptions = {
@@ -638,7 +796,8 @@ const handleRemoveTab = (tabId: string) => {
   if (activeTabId.value === tabId) {
     if (openedFiles.value.length > 0) {
       const newIndex = Math.min(index, openedFiles.value.length - 1)
-      activeTabId.value = openedFiles.value[newIndex].id!.toString()
+      const newFile = openedFiles.value[newIndex] as OpenedFile
+      activeTabId.value = newFile.id!.toString()
     } else {
       activeTabId.value = null
     }
