@@ -134,36 +134,6 @@ const currentVersion = computed(() => {
   return `v${versionList.value[0].versionNumber}`
 })
 
-// 监听 visible 变化
-watch(
-  () => props.modelValue,
-  (val) => {
-    visible.value = val
-    if (val && props.currentFileId) {
-      loadVersionList()
-    }
-  },
-  { immediate: true }
-)
-
-// 监听 visible 变化，同步到父组件
-watch(visible, (val) => {
-  emit('update:modelValue', val)
-})
-
-// 监听当前文件变化，重新加载版本列表
-watch(
-  () => props.currentFileId,
-  (newVal, oldVal) => {
-    console.log('currentFileId 变化:', { newVal, oldVal, visible: visible.value })
-    if (visible.value && newVal && newVal !== oldVal) {
-      // 重置分页参数
-      current.value = 1
-      loadVersionList()
-    }
-  }
-)
-
 // 加载版本列表
 const loadVersionList = async (fileId?: number) => {
   const targetFileId = fileId || props.currentFileId
@@ -195,6 +165,20 @@ const loadVersionList = async (fileId?: number) => {
     loading.value = false
   }
 }
+
+// 暴露方法
+const refreshVersionList = async () => {
+  if (props.currentFileId) {
+    await loadVersionList()
+  }
+}
+
+defineExpose({
+  show: () => {
+    visible.value = true
+  },
+  refresh: refreshVersionList
+})
 
 // 处理关闭
 const handleClose = () => {
@@ -237,12 +221,35 @@ const handleVersionDeleted = () => {
   emit('deleted')
 }
 
-// 暴露方法
-defineExpose({
-  show: () => {
-    visible.value = true
-  }
+// 监听 visible 变化
+watch(
+  () => props.modelValue,
+  (val) => {
+    visible.value = val
+    if (val && props.currentFileId) {
+      loadVersionList()
+    }
+  },
+  { immediate: true }
+)
+
+// 监听 visible 变化，同步到父组件
+watch(visible, (val) => {
+  emit('update:modelValue', val)
 })
+
+// 监听当前文件变化，重新加载版本列表
+watch(
+  () => props.currentFileId,
+  (newVal, oldVal) => {
+    console.log('currentFileId 变化:', { newVal, oldVal, visible: visible.value })
+    if (visible.value && newVal && newVal !== oldVal) {
+      // 重置分页参数
+      current.value = 1
+      loadVersionList()
+    }
+  }
+)
 </script>
 
 <style scoped>

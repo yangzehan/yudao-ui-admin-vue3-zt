@@ -1,4 +1,4 @@
-<template>
+/<template>
   <ContentWrap>
     <!-- 主要内容区域：Splitter 布局 -->
     <div class="h-[calc(100vh-120px)] mt-16px">
@@ -210,6 +210,7 @@
 
     <!-- 版本面板 -->
     <VersionPanel
+      ref="versionPanelRef"
       v-model="versionPanelVisible"
       :current-file-id="activeTabId ? Number(activeTabId) : undefined"
       :file-name="(openedFiles.find(f => f.id?.toString() === activeTabId) as OpenedFile | undefined)?.name"
@@ -234,6 +235,7 @@ import {
   renameDataIngestion as renameFile,
   moveDataIngestion as moveFile,
   getDataIngestionContent as getFileContent,
+  getDataIngestionData as getFileData,
   saveDataIngestionContent as saveFileContent,
   saveDataIngestionData as saveFileData,
   generateDataIngestionPath as generateFilePath,
@@ -265,6 +267,7 @@ interface OpenedFile extends FileManageVO {
   content: string
   isDirty: boolean
   activeToolbarKey?: string
+  config?: any
 }
 const openedFiles = ref<OpenedFile[]>([])
 
@@ -283,6 +286,7 @@ const targetFolderId = ref<number>(0)
 
 // 版本面板状态
 const versionPanelVisible = ref(false)
+const versionPanelRef = ref()
 
 // ==================== 工具栏数据 ====================
 
@@ -350,10 +354,12 @@ const loadFileTree = async () => {
 // 加载文件内容并添加到已打开文件列表
 const loadFileContent = async (file: FileManageVO) => {
   try {
-    const content = await getFileContent(file.id!)
+    // 使用新的get-data接口获取文件数据和配置信息
+    const fileData = await getFileData(file.id!)
     const newFile: OpenedFile = {
       ...file,
-      content: content || `# ${file.name}\n# 数据摄取配置\n`,
+      content: fileData.content || `# ${file.name}\n# 数据摄取配置\n`,
+      config: fileData.config,
       isDirty: false,
       activeToolbarKey: undefined
     }
@@ -631,14 +637,8 @@ const handleSave = async () => {
     isSaving.value = true
 
     // 使用统一的saveData接口，同时保存内容和创建版本
-    const config = {
-      type: currentFile.type,
-      parentId: currentFile.parentId,
-      filePath: currentFile.filePath,
-      sort: currentFile.sort,
-      fileSize: currentFile.fileSize,
-      status: currentFile.status
-    }
+    // config保存用户在配置面板中修改的Flink配置信息
+    const config = currentFile.config
 
     await saveFileData({
       id: currentFile.id!,
@@ -652,7 +652,12 @@ const handleSave = async () => {
       config: config
     })
 
+    // 保存成功后，重新加载文件数据确保同步
+    const fileData = await getFileData(currentFile.id!)
+    currentFile.content = fileData.content || currentFile.content
+    currentFile.config = fileData.config
     currentFile.isDirty = false
+
     message.success('保存成功')
   } catch (error: any) {
     console.error('保存失败:', error)
@@ -663,12 +668,21 @@ const handleSave = async () => {
 }
 
 // 版本回滚处理
-const handleVersionRollback = () => {
+const handleVersionRollback = async () => {
   // 重新加载当前文件内容
   const currentFile = openedFiles.value.find(f => f.id?.toString() === activeTabId.value)
   if (currentFile) {
-    loadFileContent(currentFile)
-  }
+      const fileData = await getFileData(currentFile.id!)
+      // 更新当前文件对象的内容和配置
+      currentFile.content = fileData.content || currentFile.content
+      currentFile.config = fileData.config
+      currentFile.isDirty = false
+
+      // 刷新版本面板的版本列表
+      if (versionPanelRef.value?.refresh) {
+        versionPanelRef.value.refresh()
+      }
+    }
 }
 
 // 工具栏按钮点击事件

@@ -1,12 +1,11 @@
 import request from '@/config/axios'
 
-export interface ConfigInfo {
-  type?: string
-  parentId?: number
-  filePath?: string
-  sort?: number
-  fileSize?: number
-  status?: number
+export interface FlinkConfig {
+  executionMode?: string
+  flinkVersion?: string
+  parallelism?: number
+  checkpointInterval?: number
+  extendedConfig?: Record<string, any>
 }
 
 export interface DataIngestionVO {
@@ -16,6 +15,7 @@ export interface DataIngestionVO {
   parentId?: number
   filePath?: string
   content?: string
+  config?: FlinkConfig
   sort?: number
   fileSize?: number
   status?: number
@@ -50,7 +50,7 @@ export interface DataIngestionDataSaveReqVO {
   content?: string
   sort?: number
   status?: number
-  config?: ConfigInfo
+  config?: FlinkConfig
 }
 
 // ==================== 数据摄取 API ====================
@@ -123,6 +123,11 @@ export const saveDataIngestionData = async (data: DataIngestionDataSaveReqVO): P
 // 获取文件内容
 export const getDataIngestionContent = (id: number): Promise<string> => {
   return request.get({ url: '/data-ingestion/get-content', params: { id } })
+}
+
+// 获取文件数据和配置信息
+export const getDataIngestionData = (id: number): Promise<DataIngestionDataSaveReqVO> => {
+  return request.get({ url: '/data-ingestion/get-data', params: { id } })
 }
 
 // ==================== 工具方法 ====================
