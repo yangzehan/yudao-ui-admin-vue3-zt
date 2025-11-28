@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { defineProps, ref, watch } from 'vue'
+import { defineProps, ref, watch, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { QuestionFilled, InfoFilled } from '@element-plus/icons-vue'
+import { flinkClusterApi, FlinkCluster, ClusterType, ClusterStatus } from '@/api/dataStudio/flinkCluster'
 
 // 定义props
 const props = defineProps<{
@@ -24,8 +25,13 @@ const configData = ref({
   executionMode: 'local',
   flinkVersion: '1.16',
   parallelism: 1,
-  checkpointInterval: 5000
+  checkpointInterval: 5000,
+  clusterId: undefined as number | undefined
 })
+
+// 集群列表状态
+const clusterList = ref<FlinkCluster[]>([])
+const clusterLoading = ref(false)
 
 // 标记是否正在从外部同步数据（避免循环更新）
 let isSyncingFromExternal = false
@@ -52,6 +58,64 @@ watch(configData, (newConfig) => {
   }
 }, { deep: true })
 
+// 是否显示Flink版本选择
+const showFlinkVersion = computed(() => {
+  return configData.value.executionMode === 'local' ||
+         configData.value.executionMode === 'yarn-application'
+})
+
+// 是否显示集群选择
+const showClusterSelect = computed(() => {
+  return configData.value.executionMode === 'remote' ||
+         configData.value.executionMode === 'yarn-application'
+})
+
+// 集群类型
+const clusterType = computed<ClusterType | null>(() => {
+  if (configData.value.executionMode === 'remote') return ClusterType.REMOTE
+  if (configData.value.executionMode === 'yarn-application') return ClusterType.YARN
+  return null
+})
+
+// 集群类型描述
+const clusterTypeDesc = computed(() => {
+  if (clusterType.value === ClusterType.REMOTE) return '远程独立部署的Flink集群'
+  if (clusterType.value === ClusterType.YARN) return 'Flink on Yarn集群'
+  return ''
+})
+
+// 加载集群列表
+const loadClusters = async (type: ClusterType) => {
+  try {
+    clusterLoading.value = true
+    const resp = await flinkClusterApi.getList({
+      type,
+      status: ClusterStatus.AVAILABLE,  // 仅显示可用集群
+      page: 1,
+      pageSize: 100
+    })
+    clusterList.value = resp.list || []
+  } catch (error) {
+    console.error('加载集群列表失败:', error)
+    ElMessage.error('加载集群列表失败')
+    clusterList.value = []
+  } finally {
+    clusterLoading.value = false
+  }
+}
+
+// 监听执行模式变化，自动加载对应的集群列表
+watch(() => configData.value.executionMode, (newMode) => {
+  if (newMode === 'remote') {
+    loadClusters(ClusterType.REMOTE)
+  } else if (newMode === 'yarn-application') {
+    loadClusters(ClusterType.YARN)
+  } else if (newMode === 'local') {
+    // 切换到local模式时清空clusterId
+    configData.value.clusterId = undefined
+  }
+}, { immediate: false })
+
 // 验证配置项
 const validateConfig = (config: typeof configData.value): boolean => {
   // 并行度验证
@@ -71,22 +135,43 @@ const validateConfig = (config: typeof configData.value): boolean => {
     return false
   }
 
-  // Flink版本验证
-  const validVersions = ['1.14', '1.15', '1.16', '1.17', '1.18']
-  if (!validVersions.includes(config.flinkVersion)) {
-    ElMessage.warning('请选择有效的Flink版本')
-    return false
-  }
-
   // 执行模式验证
-  const validModes = ['local', 'remote', 'cluster']
+  const validModes = ['local', 'remote', 'yarn-application']
   if (!validModes.includes(config.executionMode)) {
     ElMessage.warning('请选择有效的执行模式')
     return false
   }
 
+  // Flink版本验证（local和yarn-application模式必填）
+  if (config.executionMode === 'local' || config.executionMode === 'yarn-application') {
+    const validVersions = ['1.14', '1.15', '1.16', '1.17', '1.18']
+    if (!config.flinkVersion || !validVersions.includes(config.flinkVersion)) {
+      ElMessage.warning('请选择有效的Flink版本')
+      return false
+    }
+  }
+
+  // 集群选择验证（remote和yarn-application模式必填）
+  if (config.executionMode === 'remote' || config.executionMode === 'yarn-application') {
+    if (!config.clusterId) {
+      ElMessage.warning('请选择集群')
+      return false
+    }
+  }
+
   return true
 }
+
+// 组件挂载时加载集群列表
+onMounted(() => {
+  // 如果当前配置已选择了remote或yarn-application模式，加载对应集群列表
+  const mode = configData.value.executionMode
+  if (mode === 'remote') {
+    loadClusters(ClusterType.REMOTE)
+  } else if (mode === 'yarn-application') {
+    loadClusters(ClusterType.YARN)
+  }
+})
 
 // 向外暴露方法和数据，供父组件使用
 defineExpose({
@@ -105,6 +190,7 @@ defineExpose({
     <!-- 配置内容区域 -->
     <div class="flex-1 overflow-y-auto p-16px">
       <div class="space-y-20px">
+        <!-- 执行模式 -->
         <div>
           <div class="flex items-center gap-8px mb-8px">
             <label class="text-14px font-600 text-[var(--el-text-color-primary)]">执行模式</label>
@@ -117,11 +203,52 @@ defineExpose({
           <el-select v-model="configData.executionMode" class="w-full">
             <el-option label="本地模式 - 在本地机器上运行" value="local" />
             <el-option label="远程模式 - 连接远程Flink集群" value="remote" />
-            <el-option label="集群模式 - 在Flink集群上运行" value="cluster" />
+            <el-option label="Yarn Application模式 - 在Yarn上以Application模式运行" value="yarn-application" />
           </el-select>
         </div>
 
-        <div>
+        <!-- 集群选择（remote和yarn-application模式显示） -->
+        <div v-if="showClusterSelect">
+          <div class="flex items-center gap-8px mb-8px">
+            <label class="text-14px font-600 text-[var(--el-text-color-primary)]">选择集群</label>
+            <el-tooltip :content="`选择要连接的${clusterTypeDesc}`" placement="top">
+              <el-icon class="text-[var(--el-text-color-placeholder)] cursor-help" :size="14">
+                <QuestionFilled />
+              </el-icon>
+            </el-tooltip>
+          </div>
+          <el-select
+            v-model="configData.clusterId"
+            placeholder="请选择集群"
+            :loading="clusterLoading"
+            clearable
+            filterable
+            class="w-full"
+          >
+            <el-option
+              v-for="cluster in clusterList"
+              :key="cluster.id"
+              :label="cluster.name"
+              :value="cluster.id"
+            >
+              <div class="flex items-center justify-between">
+                <span>{{ cluster.name }}</span>
+                <el-tag
+                  size="small"
+                  :type="cluster.status === 'available' ? 'success' : 'info'"
+                >
+                  {{ cluster.status }}
+                </el-tag>
+              </div>
+            </el-option>
+          </el-select>
+          <div class="text-12px text-[var(--el-color-info)] mt-4px">
+            {{ clusterTypeDesc }}
+          </div>
+        </div>
+
+        <!-- Flink版本（local和yarn-application模式显示） -->
+        <div v-if="showFlinkVersion">
           <div class="flex items-center gap-8px mb-8px">
             <label class="text-14px font-600 text-[var(--el-text-color-primary)]">Flink版本</label>
             <el-tooltip content="选择要使用的Flink版本，建议使用1.16或更高版本" placement="top">
@@ -139,6 +266,7 @@ defineExpose({
           </el-select>
         </div>
 
+        <!-- 并行度 -->
         <div>
           <div class="flex items-center gap-8px mb-8px">
             <label class="text-14px font-600 text-[var(--el-text-color-primary)]">并行度</label>
@@ -151,6 +279,7 @@ defineExpose({
           <el-input-number v-model="configData.parallelism" :min="1" :max="1000" :step="1" class="w-full" />
         </div>
 
+        <!-- 检查点间隔 -->
         <div>
           <div class="flex items-center gap-8px mb-8px">
             <label class="text-14px font-600 text-[var(--el-text-color-primary)]">检查点间隔 (ms)</label>

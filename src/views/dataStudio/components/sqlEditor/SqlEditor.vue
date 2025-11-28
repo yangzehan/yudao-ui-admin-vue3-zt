@@ -233,7 +233,7 @@ import {
 } from '@/api/dataStudio/file'
 import { getVersionList, VersionItem } from '@/api/dataStudio/version'
 import { ElMessageBox } from 'element-plus'
-import ConfigPanel from './components/ConfigPanel.vue'
+import ConfigPanel from '@/components/dataStudio/ConfigPanel.vue'
 
 const message = useMessage() // 消息弹窗
 
@@ -298,7 +298,8 @@ const defaultConfig = {
   executionMode: 'local',
   flinkVersion: '1.16',
   parallelism: 1,
-  checkpointInterval: 5000
+  checkpointInterval: 5000,
+  clusterId: undefined
 }
 
 // 配置版本（用于兼容性升级）
@@ -314,7 +315,8 @@ const mergeWithDefaultConfig = (userConfig: any) => {
     executionMode: userConfig.executionMode || defaultConfig.executionMode,
     flinkVersion: userConfig.flinkVersion || defaultConfig.flinkVersion,
     parallelism: userConfig.parallelism || defaultConfig.parallelism,
-    checkpointInterval: userConfig.checkpointInterval || defaultConfig.checkpointInterval
+    checkpointInterval: userConfig.checkpointInterval || defaultConfig.checkpointInterval,
+    clusterId: userConfig.clusterId  // 允许为undefined
   }
 }
 
@@ -337,18 +339,28 @@ const validateConfig = (config: any): boolean => {
     return false
   }
 
-  // Flink版本验证
-  const validVersions = ['1.14', '1.15', '1.16', '1.17', '1.18']
-  if (!validVersions.includes(config.flinkVersion)) {
-    message.warning('请选择有效的Flink版本')
-    return false
-  }
-
   // 执行模式验证
-  const validModes = ['local', 'remote', 'cluster']
+  const validModes = ['local', 'remote', 'yarn-application']
   if (!validModes.includes(config.executionMode)) {
     message.warning('请选择有效的执行模式')
     return false
+  }
+
+  // Flink版本验证（local和yarn-application模式必填）
+  if (config.executionMode === 'local' || config.executionMode === 'yarn-application') {
+    const validVersions = ['1.14', '1.15', '1.16', '1.17', '1.18']
+    if (!config.flinkVersion || !validVersions.includes(config.flinkVersion)) {
+      message.warning('请选择有效的Flink版本')
+      return false
+    }
+  }
+
+  // 集群选择验证（remote和yarn-application模式必填）
+  if (config.executionMode === 'remote' || config.executionMode === 'yarn-application') {
+    if (!config.clusterId) {
+      message.warning('请选择集群')
+      return false
+    }
   }
 
   return true

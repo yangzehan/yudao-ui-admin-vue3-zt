@@ -826,6 +826,16 @@ const remainingRouter: AppRouteRecordRaw[] = [
           icon: 'ep:monitor',
           noCache: false
         }
+      },
+      {
+        path: 'flink-cluster',
+        component: () => import('@/views/dataStudio/components/FlinkClusterManagement.vue'),
+        name: 'DataStudioFlinkCluster',
+        meta: {
+          title: 'Flink 集群管理',
+          icon: 'ep:cloudy',
+          noCache: false
+        }
       }
     ]
   }

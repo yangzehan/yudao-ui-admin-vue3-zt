@@ -88,11 +88,38 @@
             <span v-else>-</span>
           </el-descriptions-item>
 
-          <el-descriptions-item label="Flink版本">
-            <el-tag v-if="versionDetail.config?.flinkVersion" type="success">
+          <!-- 集群信息（remote和yarn-application模式显示） -->
+          <el-descriptions-item
+            v-if="versionDetail.config?.clusterId"
+            label="选择的集群"
+          >
+            <div v-if="clusterInfo">
+              <div class="flex items-center gap-8px">
+                <span>{{ clusterInfo.name }}</span>
+                <el-tag size="small" :type="clusterInfo.status === 'available' ? 'success' : 'info'">
+                  {{ clusterInfo.status }}
+                </el-tag>
+              </div>
+              <div class="text-12px text-[var(--el-color-info)] mt-4px">
+                类型: {{ clusterInfo.type === 'remote' ? '远程集群' : 'Yarn集群' }}
+                <span v-if="clusterInfo.flinkVersion"> | Flink {{ clusterInfo.flinkVersion }}</span>
+              </div>
+            </div>
+            <div v-else class="text-[var(--el-color-info)]">
+              集群ID: {{ versionDetail.config.clusterId }}
+            </div>
+          </el-descriptions-item>
+
+          <!-- Flink版本（local和yarn-application模式显示） -->
+          <el-descriptions-item
+            v-if="versionDetail.config?.flinkVersion &&
+                  (versionDetail.config?.executionMode === 'local' ||
+                   versionDetail.config?.executionMode === 'yarn-application')"
+            label="Flink版本"
+          >
+            <el-tag type="success">
               {{ versionDetail.config.flinkVersion }}
             </el-tag>
-            <span v-else>-</span>
           </el-descriptions-item>
 
           <el-descriptions-item label="并行度">
@@ -140,6 +167,7 @@ import {defineExpose, ref, watch, onUnmounted, computed} from 'vue'
 import {ElMessage} from 'element-plus'
 import {formatTime} from '@/utils'
 import {getVersionDetail, type VersionDetail} from '@/api/dataStudio/dataIngestionVersion'
+import {flinkClusterApi, FlinkCluster} from '@/api/dataStudio/flinkCluster'
 import RollbackConfirmDialog from './RollbackConfirmDialog.vue'
 
 // Props
@@ -165,6 +193,7 @@ const loading = ref(false)
 const rollbackLoading = ref(false)
 const rollbackDialogVisible = ref(false)
 const isUnmounted = ref(false)
+const clusterInfo = ref<FlinkCluster | null>(null)
 
 // 计算是否有Flink配置信息
 const hasFlinkConfig = computed(() => {
@@ -182,6 +211,7 @@ const getExecutionModeLabel = (mode: string): string => {
   const modeMap: Record<string, string> = {
     'local': '本地模式',
     'remote': '远程模式',
+    'yarn-application': 'Yarn Application模式',
     'cluster': '集群模式'
   }
   return modeMap[mode] || mode
@@ -215,6 +245,19 @@ watch(
   }
 )
 
+// 加载集群信息
+const loadClusterInfo = async (clusterId: number) => {
+  try {
+    const cluster = await flinkClusterApi.getDetail(clusterId)
+    if (!isUnmounted.value && visible.value) {
+      clusterInfo.value = cluster
+    }
+  } catch (error) {
+    console.error('加载集群信息失败:', error)
+    clusterInfo.value = null
+  }
+}
+
 // 加载版本详情
 const loadVersionDetail = async () => {
   if (!props.versionId || !visible.value || isUnmounted.value) return
@@ -225,6 +268,13 @@ const loadVersionDetail = async () => {
     // 确保组件未卸载且仍然可见
     if (!isUnmounted.value && visible.value) {
       versionDetail.value = detail
+
+      // 如果配置中有clusterId，加载集群信息
+      if (detail.config?.clusterId) {
+        await loadClusterInfo(detail.config.clusterId)
+      } else {
+        clusterInfo.value = null
+      }
     }
   } catch (error: any) {
     // 确保组件未卸载才显示错误

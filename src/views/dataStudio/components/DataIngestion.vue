@@ -246,7 +246,7 @@ import {
 import { createVersion } from '@/api/dataStudio/dataIngestionVersion'
 import { ElMessageBox } from 'element-plus'
 import VersionPanel from './dataIngestion/components/VersionPanel.vue'
-import ConfigPanel from './dataIngestion/components/ConfigPanel.vue'
+import ConfigPanel from '@/components/dataStudio/ConfigPanel.vue'
 
 const message = useMessage() // 消息弹窗
 
