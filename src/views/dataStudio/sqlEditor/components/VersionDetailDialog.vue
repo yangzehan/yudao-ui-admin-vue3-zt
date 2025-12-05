@@ -35,7 +35,7 @@
 
       <!-- 脚本内容 -->
       <div class="content-section" v-if="versionDetail">
-        <h4>文件内容</h4>
+        <h4>脚本内容</h4>
         <el-input
           :model-value="versionDetail.content || ''"
           type="textarea"
@@ -47,50 +47,35 @@
 
       <!-- 配置信息 -->
       <div class="config-section" v-if="versionDetail?.config">
-        <h4>文件配置</h4>
+        <h4>Flink配置</h4>
         <el-descriptions :column="2" border>
-          <el-descriptions-item label="文件类型">
-            <el-tag type="success">{{ versionDetail.config.type || 'file' }}</el-tag>
-          </el-descriptions-item>
-
-          <el-descriptions-item label="父文件夹ID">
-            <span>{{ versionDetail.config.parentId || '-' }}</span>
-          </el-descriptions-item>
-
-          <el-descriptions-item label="文件路径">
-            <span>{{ versionDetail.config.filePath || '-' }}</span>
-          </el-descriptions-item>
-
-          <el-descriptions-item label="显示顺序">
-            <el-tag type="warning">{{ versionDetail.config.sort || 0 }}</el-tag>
-          </el-descriptions-item>
-
-          <el-descriptions-item label="文件大小">
-            <span>{{ formatFileSize(versionDetail.config.fileSize) }}</span>
-          </el-descriptions-item>
-
-          <el-descriptions-item label="状态">
-            <el-tag :type="versionDetail.config.status === 1 ? 'success' : 'info'">
-              {{ versionDetail.config.status === 1 ? '启用' : '禁用' }}
+          <el-descriptions-item label="执行类型">
+            <el-tag :type="(versionDetail.config.executionType || 'stream') === 'stream' ? 'primary' : 'info'">
+              {{
+                (versionDetail.config.executionType || 'stream') === 'stream' ? '流处理' :
+                (versionDetail.config.executionType || 'stream') === 'batch' ? '批处理' :
+                versionDetail.config.executionType || '-'
+              }}
             </el-tag>
           </el-descriptions-item>
-        </el-descriptions>
-      </div>
 
-      <!-- Flink任务配置信息 -->
-      <div class="flink-config-section" v-if="hasFlinkConfig">
-        <h4>Flink任务配置</h4>
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="执行模式">
-            <el-tag v-if="versionDetail.config?.executionMode" type="primary">
-              {{ getExecutionModeLabel(versionDetail.config.executionMode) }}
+          <el-descriptions-item label="部署模式">
+            <el-tag
+              :type="(versionDetail.config.deployMode || versionDetail.config.executionMode || 'local') === 'local' ? 'success' :
+                     (versionDetail.config.deployMode || versionDetail.config.executionMode || 'local') === 'remote' ? 'warning' : 'primary'"
+            >
+              {{
+                (versionDetail.config.deployMode || versionDetail.config.executionMode || 'local') === 'local' ? '本地模式' :
+                (versionDetail.config.deployMode || versionDetail.config.executionMode || 'local') === 'remote' ? '远程模式' :
+                (versionDetail.config.deployMode || versionDetail.config.executionMode || 'local') === 'yarn-application' ? 'Yarn Application模式' :
+                versionDetail.config.deployMode || versionDetail.config.executionMode || '-'
+              }}
             </el-tag>
-            <span v-else>-</span>
           </el-descriptions-item>
 
           <!-- 集群信息（remote和yarn-application模式显示） -->
           <el-descriptions-item
-            v-if="versionDetail.config?.clusterId"
+            v-if="versionDetail.config.clusterId"
             label="选择的集群"
           >
             <div v-if="clusterInfo">
@@ -112,30 +97,34 @@
 
           <!-- Flink版本（local和yarn-application模式显示） -->
           <el-descriptions-item
-            v-if="versionDetail.config?.flinkVersion &&
-                  (versionDetail.config?.executionMode === 'local' ||
-                   versionDetail.config?.executionMode === 'yarn-application')"
+            v-if="versionDetail.config.flinkVersion &&
+                  ((versionDetail.config.deployMode || versionDetail.config.executionMode) === 'local' ||
+                   (versionDetail.config.deployMode || versionDetail.config.executionMode) === 'yarn-application')"
             label="Flink版本"
           >
-            <el-tag type="success">
-              {{ versionDetail.config.flinkVersion }}
-            </el-tag>
+            <el-tag type="info">{{ versionDetail.config.flinkVersion }}</el-tag>
           </el-descriptions-item>
 
           <el-descriptions-item label="并行度">
-            <el-tag v-if="versionDetail.config?.parallelism !== undefined" type="warning">
-              {{ versionDetail.config.parallelism }}
-            </el-tag>
-            <span v-else>-</span>
+            <el-tag type="warning">{{ versionDetail.config.parallelism || 1 }}</el-tag>
           </el-descriptions-item>
 
-          <el-descriptions-item label="检查点间隔 (ms)">
-            <span v-if="versionDetail.config?.checkpointInterval !== undefined">
-              {{ versionDetail.config.checkpointInterval }}
-            </span>
-            <span v-else>-</span>
+          <el-descriptions-item label="检查点间隔">
+            <span>{{ (versionDetail.config.checkpointInterval || 5000) + 'ms' }}</span>
           </el-descriptions-item>
         </el-descriptions>
+
+        <!-- 扩展配置项 -->
+        <div v-if="versionDetail.config.extendedConfig && Object.keys(versionDetail.config.extendedConfig).length > 0" class="extended-config">
+          <h4>扩展配置</h4>
+          <el-descriptions :column="2" border>
+            <template v-for="(value, key) in versionDetail.config.extendedConfig" :key="key">
+              <el-descriptions-item :label="formatConfigKey(key)">
+                <span>{{ formatConfigValue(value) }}</span>
+              </el-descriptions-item>
+            </template>
+          </el-descriptions>
+        </div>
       </div>
     </div>
 
@@ -163,10 +152,10 @@
 </template>
 
 <script setup lang="ts">
-import {defineExpose, ref, watch, onUnmounted, computed} from 'vue'
+import {defineExpose, ref, watch, onUnmounted} from 'vue'
 import {ElMessage} from 'element-plus'
 import {formatTime} from '@/utils'
-import {getVersionDetail, type VersionDetail} from '@/api/dataStudio/dataIngestionVersion'
+import {getVersionDetail, type VersionDetail} from '@/api/dataStudio/version'
 import {flinkClusterApi, FlinkCluster} from '@/api/dataStudio/flinkCluster'
 import RollbackConfirmDialog from './RollbackConfirmDialog.vue'
 
@@ -194,28 +183,6 @@ const rollbackLoading = ref(false)
 const rollbackDialogVisible = ref(false)
 const isUnmounted = ref(false)
 const clusterInfo = ref<FlinkCluster | null>(null)
-
-// 计算是否有Flink配置信息
-const hasFlinkConfig = computed(() => {
-  const config = versionDetail.value.config
-  return config && (
-    config.executionMode ||
-    config.flinkVersion ||
-    config.parallelism !== undefined ||
-    config.checkpointInterval !== undefined
-  )
-})
-
-// 获取执行模式标签
-const getExecutionModeLabel = (mode: string): string => {
-  const modeMap: Record<string, string> = {
-    'local': '本地模式',
-    'remote': '远程模式',
-    'yarn-application': 'Yarn Application模式',
-    'cluster': '集群模式'
-  }
-  return modeMap[mode] || mode
-}
 
 // 监听 visible 变化
 watch(
@@ -267,6 +234,14 @@ const loadVersionDetail = async () => {
     const detail = await getVersionDetail(props.versionId)
     // 确保组件未卸载且仍然可见
     if (!isUnmounted.value && visible.value) {
+      // 兼容性处理：如果旧版本数据中只有executionMode，则转换为新的配置结构
+      if (detail.config && detail.config.executionMode && !detail.config.executionType) {
+        detail.config.executionType = 'stream'  // 默认值
+      }
+      if (detail.config && detail.config.executionMode && !detail.config.deployMode) {
+        detail.config.deployMode = detail.config.executionMode
+      }
+
       versionDetail.value = detail
 
       // 如果配置中有clusterId，加载集群信息
@@ -306,7 +281,7 @@ const confirmRollback = async () => {
   rollbackLoading.value = true
   try {
     // 调用回退接口
-    const { rollbackVersion } = await import('@/api/dataStudio/dataIngestionVersion')
+    const { rollbackVersion } = await import('@/api/dataStudio/version')
     await rollbackVersion(versionDetail.value.id)
 
     ElMessage.success('版本回退成功')
@@ -332,13 +307,38 @@ onUnmounted(() => {
   isUnmounted.value = true
 })
 
-// 格式化文件大小
-const formatFileSize = (bytes?: number): string => {
-  if (!bytes) return '-'
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB'
-  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
-  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+// 格式化配置项的键名
+const formatConfigKey = (key: string): string => {
+  // 将驼峰命名转换为中文描述
+  const keyMap: Record<string, string> = {
+    'restartStrategy': '重启策略',
+    'checkpointingMode': '检查点模式',
+    'checkpointTimeout': '检查点超时',
+    'minPauseBetweenCheckpoints': '检查点最小间隔',
+    'maxConcurrentCheckpoints': '最大并发检查点数',
+    'restartAttempts': '重启次数',
+    'delayInterval': '重启延迟间隔',
+    'stateBackend': '状态后端',
+    'checkpointStorage': '检查点存储',
+    'sqlDialect': 'SQL方言',
+    'jobName': '任务名称',
+    'description': '任务描述'
+  }
+  return keyMap[key] || key
+}
+
+// 格式化配置项的值
+const formatConfigValue = (value: any): string => {
+  if (value === null || value === undefined) {
+    return '-'
+  }
+  if (typeof value === 'boolean') {
+    return value ? '是' : '否'
+  }
+  if (typeof value === 'object') {
+    return JSON.stringify(value)
+  }
+  return String(value)
 }
 </script>
 
@@ -364,16 +364,25 @@ const formatFileSize = (bytes?: number): string => {
   font-weight: 600;
 }
 
-.config-section,
-.flink-config-section {
+.config-section {
   margin-top: 20px;
 }
 
-.config-section h4,
-.flink-config-section h4 {
+.config-section h4 {
   margin-bottom: 10px;
   font-size: 14px;
   font-weight: 600;
+}
+
+.extended-config {
+  margin-top: 20px;
+}
+
+.extended-config h4 {
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
 }
 
 .dialog-footer {

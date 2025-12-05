@@ -322,44 +322,6 @@ src/
 - 文件上传支持多种存储后端（本地、S3、FTP 等）
 - DataStudio 模块从 Dinky-web 迁移而来，遵循既定模式
 
-## 最近更新
-
-### 项目管理2组件
-- **路径**：`src/views/dataStudio/components/ProjectManagement2.vue`
-- **创建时间**：新的项目管理页面，使用 Splitter 布局
-- **特性**：
-  - 使用 Element Plus `el-splitter` 实现响应式布局
-  - 左侧面板：文件管理树形视图
-  - 右侧面板：Monaco Editor 代码编辑
-  - 顶部工具栏带有运行、调试和保存按钮
-  - 支持 SQL 文件编辑和语法高亮
-  - 使用全局 CSS 变量自定义样式
-
-### 路由配置
-- **文件**：`src/router/modules/remaining.ts`
-- **路由路径**：`/datastudio/project2`
-- **路由名称**：`DataStudioProject2`
-- **菜单标题**：`项目管理2`
-- **图标**：`ep:folder`
-- **元信息**：`{ noCache: false }`
-
-### 组件特性
-- **文件树**：层次化的文件/文件夹结构，带图标
-- **Monaco Editor**：功能齐全的代码编辑器，具有：
-  - SQL 语法高亮
-  - 小地图导航
-  - 代码折叠
-  - 自动换行
-  - 可自定义设置
-- **工具栏操作**：
-  - 运行按钮（主要）
-  - 调试按钮（警告）
-  - 保存按钮（成功）
-- **样式**：遵循项目设计系统，具有：
-  - CSS 变量用于主题
-  - Element Plus 一致的样式
-  - 响应式布局
-
 ## 公共组件使用规范
 
 ### 组件库架构
@@ -475,6 +437,7 @@ src/components/
 - **组件解耦**：业务逻辑与 UI 分离
 - **props 规范**：使用 `propTypes` 定义类型和默认值
 - **插槽优先**：通过插槽扩展组件而非继承
+- **尽量不适用div a h 等等html标签**：使用公共组件或Element Plus替代
 
 ## Element Plus Splitter
 组件使用 Element Plus Splitter 组件进行布局：

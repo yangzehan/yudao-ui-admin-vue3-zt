@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineProps, ref, watch, computed, onMounted } from 'vue'
+import { defineProps, ref, watch, computed, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { QuestionFilled, InfoFilled } from '@element-plus/icons-vue'
 import { flinkClusterApi, FlinkCluster, ClusterType, ClusterStatus } from '@/api/dataStudio/flinkCluster'
@@ -13,7 +13,13 @@ const props = defineProps<{
     config?: any
     [key: string]: any
   }
+  showExecutionType?: boolean  // 是否显示执行类型选项
 }>()
+
+// 默认值
+const propsWithDefaults = computed(() => ({
+  showExecutionType: props.showExecutionType ?? true  // 默认显示执行类型
+}))
 
 // 定义emit事件
 const emit = defineEmits<{
@@ -22,58 +28,70 @@ const emit = defineEmits<{
 
 // 配置项数据 - 使用 ref
 const configData = ref({
-  executionMode: 'local',
+  executionType: 'stream',
+  deployMode: 'local',
   flinkVersion: '1.16',
   parallelism: 1,
   checkpointInterval: 5000,
   clusterId: undefined as number | undefined
 })
 
+// 监听 showExecutionType 变化，决定是否保留 executionType
+watch(() => propsWithDefaults.value.showExecutionType, (newVal) => {
+  if (!newVal) {
+    // 如果不显示执行类型，则从配置中移除
+    delete configData.value.executionType
+  } else if (!configData.value.executionType) {
+    // 如果需要显示但没有值，则设置默认值
+    configData.value.executionType = 'stream'
+  }
+}, { immediate: true })
+
 // 集群列表状态
 const clusterList = ref<FlinkCluster[]>([])
 const clusterLoading = ref(false)
 
 // 标记是否正在从外部同步数据（避免循环更新）
-let isSyncingFromExternal = false
+const isSyncingFromExternal = ref(false)
 
 // 同步外部配置到本地
 watch(() => props.file?.config, (newConfig) => {
   if (newConfig) {
-    isSyncingFromExternal = true
+    isSyncingFromExternal.value = true
     configData.value = {
       ...configData.value,
       ...newConfig
     }
-    // 延迟重置标志位
-    setTimeout(() => {
-      isSyncingFromExternal = false
-    }, 0)
+    // 使用 nextTick 确保配置同步完成后再重置标志位
+    nextTick(() => {
+      isSyncingFromExternal.value = false
+    })
   }
 }, { immediate: true, deep: true })
 
 // 监听本地配置变化，通知父组件（排除同步操作）
 watch(configData, (newConfig) => {
-  if (!isSyncingFromExternal) {
+  if (!isSyncingFromExternal.value) {
     emit('update:config', { ...newConfig })
   }
 }, { deep: true })
 
 // 是否显示Flink版本选择
 const showFlinkVersion = computed(() => {
-  return configData.value.executionMode === 'local' ||
-         configData.value.executionMode === 'yarn-application'
+  return configData.value.deployMode === 'local' ||
+         configData.value.deployMode === 'yarn-application'
 })
 
 // 是否显示集群选择
 const showClusterSelect = computed(() => {
-  return configData.value.executionMode === 'remote' ||
-         configData.value.executionMode === 'yarn-application'
+  return configData.value.deployMode === 'remote' ||
+         configData.value.deployMode === 'yarn-application'
 })
 
 // 集群类型
 const clusterType = computed<ClusterType | null>(() => {
-  if (configData.value.executionMode === 'remote') return ClusterType.REMOTE
-  if (configData.value.executionMode === 'yarn-application') return ClusterType.YARN
+  if (configData.value.deployMode === 'remote') return ClusterType.REMOTE
+  if (configData.value.deployMode === 'yarn-application') return ClusterType.YARN
   return null
 })
 
@@ -104,8 +122,8 @@ const loadClusters = async (type: ClusterType) => {
   }
 }
 
-// 监听执行模式变化，自动加载对应的集群列表
-watch(() => configData.value.executionMode, (newMode) => {
+// 监听部署模式变化，自动加载对应的集群列表
+watch(() => configData.value.deployMode, (newMode) => {
   if (newMode === 'remote') {
     loadClusters(ClusterType.REMOTE)
   } else if (newMode === 'yarn-application') {
@@ -135,15 +153,22 @@ const validateConfig = (config: typeof configData.value): boolean => {
     return false
   }
 
-  // 执行模式验证
-  const validModes = ['local', 'remote', 'yarn-application']
-  if (!validModes.includes(config.executionMode)) {
-    ElMessage.warning('请选择有效的执行模式')
+  // 执行类型验证
+  const validExecutionTypes = ['batch', 'stream']
+  if (!validExecutionTypes.includes(config.executionType)) {
+    ElMessage.warning('请选择有效的执行类型')
+    return false
+  }
+
+  // 部署模式验证
+  const validdeployModes = ['local', 'remote', 'yarn-application']
+  if (!validdeployModes.includes(config.deployMode)) {
+    ElMessage.warning('请选择有效的部署模式')
     return false
   }
 
   // Flink版本验证（local和yarn-application模式必填）
-  if (config.executionMode === 'local' || config.executionMode === 'yarn-application') {
+  if (config.deployMode === 'local' || config.deployMode === 'yarn-application') {
     const validVersions = ['1.14', '1.15', '1.16', '1.17', '1.18']
     if (!config.flinkVersion || !validVersions.includes(config.flinkVersion)) {
       ElMessage.warning('请选择有效的Flink版本')
@@ -152,7 +177,7 @@ const validateConfig = (config: typeof configData.value): boolean => {
   }
 
   // 集群选择验证（remote和yarn-application模式必填）
-  if (config.executionMode === 'remote' || config.executionMode === 'yarn-application') {
+  if (config.deployMode === 'remote' || config.deployMode === 'yarn-application') {
     if (!config.clusterId) {
       ElMessage.warning('请选择集群')
       return false
@@ -165,7 +190,7 @@ const validateConfig = (config: typeof configData.value): boolean => {
 // 组件挂载时加载集群列表
 onMounted(() => {
   // 如果当前配置已选择了remote或yarn-application模式，加载对应集群列表
-  const mode = configData.value.executionMode
+  const mode = configData.value.deployMode
   if (mode === 'remote') {
     loadClusters(ClusterType.REMOTE)
   } else if (mode === 'yarn-application') {
@@ -190,17 +215,33 @@ defineExpose({
     <!-- 配置内容区域 -->
     <div class="flex-1 overflow-y-auto p-16px">
       <div class="space-y-20px">
-        <!-- 执行模式 -->
-        <div>
+        <!-- 执行类型（条件显示） -->
+        <div v-if="propsWithDefaults.showExecutionType">
           <div class="flex items-center gap-8px mb-8px">
-            <label class="text-14px font-600 text-[var(--el-text-color-primary)]">执行模式</label>
-            <el-tooltip content="选择Flink任务的执行环境模式" placement="top">
+            <label class="text-14px font-600 text-[var(--el-text-color-primary)]">执行类型</label>
+            <el-tooltip content="选择Flink任务的执行类型" placement="top">
               <el-icon class="text-[var(--el-text-color-placeholder)] cursor-help" :size="14">
                 <QuestionFilled />
               </el-icon>
             </el-tooltip>
           </div>
-          <el-select v-model="configData.executionMode" class="w-full">
+          <el-select v-model="configData.executionType" class="w-full">
+            <el-option label="批处理 - 批量处理数据" value="batch" />
+            <el-option label="流处理 - 实时流式处理数据" value="stream" />
+          </el-select>
+        </div>
+
+        <!-- 部署模式 -->
+        <div>
+          <div class="flex items-center gap-8px mb-8px">
+            <label class="text-14px font-600 text-[var(--el-text-color-primary)]">部署模式</label>
+            <el-tooltip content="选择Flink任务的部署环境模式" placement="top">
+              <el-icon class="text-[var(--el-text-color-placeholder)] cursor-help" :size="14">
+                <QuestionFilled />
+              </el-icon>
+            </el-tooltip>
+          </div>
+          <el-select v-model="configData.deployMode" class="w-full">
             <el-option label="本地模式 - 在本地机器上运行" value="local" />
             <el-option label="远程模式 - 连接远程Flink集群" value="remote" />
             <el-option label="Yarn Application模式 - 在Yarn上以Application模式运行" value="yarn-application" />

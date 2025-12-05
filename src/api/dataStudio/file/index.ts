@@ -23,7 +23,7 @@ export interface FileManageListReqVO {
 }
 
 export interface FlinkConfig {
-  executionMode?: string
+  deployMode?: string
   flinkVersion?: string
   parallelism?: number
   checkpointInterval?: number
@@ -131,6 +131,11 @@ export const getFileContent = (id: number): Promise<string> => {
 // 获取文件数据（内容和配置）
 export const getFileData = (id: number): Promise<FileDataVO> => {
   return request.get({ url: '/sql-edit/get-data', params: { id } })
+}
+
+// 部署文件
+export const deployFile = (id: number | string): Promise<string> => {
+  return request.get({ url: `/sql-edit/deploy/${id}` })
 }
 
 // ==================== 工具方法 ====================

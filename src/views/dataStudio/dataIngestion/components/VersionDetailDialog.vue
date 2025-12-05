@@ -35,7 +35,7 @@
 
       <!-- 脚本内容 -->
       <div class="content-section" v-if="versionDetail">
-        <h4>脚本内容</h4>
+        <h4>文件内容</h4>
         <el-input
           :model-value="versionDetail.content || ''"
           type="textarea"
@@ -45,20 +45,20 @@
         />
       </div>
 
-      <!-- 配置信息 -->
-      <div class="config-section" v-if="versionDetail?.config">
-        <h4>Flink配置</h4>
+      <!-- Flink任务配置信息 -->
+      <div class="flink-config-section" v-if="hasFlinkConfig">
+        <h4>Flink任务配置</h4>
         <el-descriptions :column="2" border>
-          <el-descriptions-item label="执行模式">
+          <el-descriptions-item label="部署模式">
             <el-tag
-              :type="versionDetail.config.executionMode === 'local' ? 'success' :
-                     versionDetail.config.executionMode === 'remote' ? 'warning' : 'primary'"
+              :type="(versionDetail.config.deployMode || versionDetail.config.executionMode || 'local') === 'local' ? 'success' :
+                     (versionDetail.config.deployMode || versionDetail.config.executionMode || 'local') === 'remote' ? 'warning' : 'primary'"
             >
               {{
-                versionDetail.config.executionMode === 'local' ? '本地模式' :
-                versionDetail.config.executionMode === 'remote' ? '远程模式' :
-                versionDetail.config.executionMode === 'yarn-application' ? 'Yarn Application模式' :
-                versionDetail.config.executionMode
+                (versionDetail.config.deployMode || versionDetail.config.executionMode || 'local') === 'local' ? '本地模式' :
+                (versionDetail.config.deployMode || versionDetail.config.executionMode || 'local') === 'remote' ? '远程模式' :
+                (versionDetail.config.deployMode || versionDetail.config.executionMode || 'local') === 'yarn-application' ? 'Yarn Application模式' :
+                versionDetail.config.deployMode || versionDetail.config.executionMode || '-'
               }}
             </el-tag>
           </el-descriptions-item>
@@ -88,8 +88,8 @@
           <!-- Flink版本（local和yarn-application模式显示） -->
           <el-descriptions-item
             v-if="versionDetail.config.flinkVersion &&
-                  (versionDetail.config.executionMode === 'local' ||
-                   versionDetail.config.executionMode === 'yarn-application')"
+                  ((versionDetail.config.deployMode || versionDetail.config.executionMode) === 'local' ||
+                   (versionDetail.config.deployMode || versionDetail.config.executionMode) === 'yarn-application')"
             label="Flink版本"
           >
             <el-tag type="info">{{ versionDetail.config.flinkVersion }}</el-tag>
@@ -103,19 +103,8 @@
             <span>{{ (versionDetail.config.checkpointInterval || 5000) + 'ms' }}</span>
           </el-descriptions-item>
         </el-descriptions>
-
-        <!-- 扩展配置项 -->
-        <div v-if="versionDetail.config.extendedConfig && Object.keys(versionDetail.config.extendedConfig).length > 0" class="extended-config">
-          <h4>扩展配置</h4>
-          <el-descriptions :column="2" border>
-            <template v-for="(value, key) in versionDetail.config.extendedConfig" :key="key">
-              <el-descriptions-item :label="formatConfigKey(key)">
-                <span>{{ formatConfigValue(value) }}</span>
-              </el-descriptions-item>
-            </template>
-          </el-descriptions>
-        </div>
       </div>
+
     </div>
 
     <template #footer>
@@ -142,10 +131,10 @@
 </template>
 
 <script setup lang="ts">
-import {defineExpose, ref, watch, onUnmounted} from 'vue'
+import {defineExpose, ref, watch, onUnmounted, computed} from 'vue'
 import {ElMessage} from 'element-plus'
 import {formatTime} from '@/utils'
-import {getVersionDetail, type VersionDetail} from '@/api/dataStudio/version'
+import {getVersionDetail, type VersionDetail} from '@/api/dataStudio/dataIngestionVersion'
 import {flinkClusterApi, FlinkCluster} from '@/api/dataStudio/flinkCluster'
 import RollbackConfirmDialog from './RollbackConfirmDialog.vue'
 
@@ -173,6 +162,19 @@ const rollbackLoading = ref(false)
 const rollbackDialogVisible = ref(false)
 const isUnmounted = ref(false)
 const clusterInfo = ref<FlinkCluster | null>(null)
+
+// 计算是否有Flink配置信息
+const hasFlinkConfig = computed(() => {
+  const config = versionDetail.value.config
+  return config && (
+    config.deployMode ||
+    config.executionMode ||
+    config.flinkVersion ||
+    config.parallelism !== undefined ||
+    config.checkpointInterval !== undefined ||
+    config.clusterId
+  )
+})
 
 // 监听 visible 变化
 watch(
@@ -263,7 +265,7 @@ const confirmRollback = async () => {
   rollbackLoading.value = true
   try {
     // 调用回退接口
-    const { rollbackVersion } = await import('@/api/dataStudio/version')
+    const { rollbackVersion } = await import('@/api/dataStudio/dataIngestionVersion')
     await rollbackVersion(versionDetail.value.id)
 
     ElMessage.success('版本回退成功')
@@ -288,40 +290,6 @@ defineExpose({
 onUnmounted(() => {
   isUnmounted.value = true
 })
-
-// 格式化配置项的键名
-const formatConfigKey = (key: string): string => {
-  // 将驼峰命名转换为中文描述
-  const keyMap: Record<string, string> = {
-    'restartStrategy': '重启策略',
-    'checkpointingMode': '检查点模式',
-    'checkpointTimeout': '检查点超时',
-    'minPauseBetweenCheckpoints': '检查点最小间隔',
-    'maxConcurrentCheckpoints': '最大并发检查点数',
-    'restartAttempts': '重启次数',
-    'delayInterval': '重启延迟间隔',
-    'stateBackend': '状态后端',
-    'checkpointStorage': '检查点存储',
-    'sqlDialect': 'SQL方言',
-    'jobName': '任务名称',
-    'description': '任务描述'
-  }
-  return keyMap[key] || key
-}
-
-// 格式化配置项的值
-const formatConfigValue = (value: any): string => {
-  if (value === null || value === undefined) {
-    return '-'
-  }
-  if (typeof value === 'boolean') {
-    return value ? '是' : '否'
-  }
-  if (typeof value === 'object') {
-    return JSON.stringify(value)
-  }
-  return String(value)
-}
 </script>
 
 <style scoped>
@@ -335,36 +303,15 @@ const formatConfigValue = (value: any): string => {
 }
 
 .content-section,
-.config-section {
+.flink-config-section {
   margin-top: 20px;
 }
 
 .content-section h4,
-.config-section h4 {
+.flink-config-section h4 {
   margin-bottom: 10px;
   font-size: 14px;
   font-weight: 600;
-}
-
-.config-section {
-  margin-top: 20px;
-}
-
-.config-section h4 {
-  margin-bottom: 10px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.extended-config {
-  margin-top: 20px;
-}
-
-.extended-config h4 {
-  margin-bottom: 10px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
 }
 
 .dialog-footer {

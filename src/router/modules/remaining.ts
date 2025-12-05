@@ -759,7 +759,7 @@ const remainingRouter: AppRouteRecordRaw[] = [
     children: [
       {
         path: 'quick-start',
-        component: () => import('@/views/dataStudio/index.vue'),
+        component: () => import('@/views/dataStudio/quickStart/index.vue'),
         name: 'DataStudioQuickStart',
         meta: {
           title: '快速开始',
@@ -769,7 +769,7 @@ const remainingRouter: AppRouteRecordRaw[] = [
       },
       {
         path: 'sql-edit',
-        component: () => import('@/views/dataStudio/components/sqlEditor/SqlEditor.vue'),
+        component: () => import('@/views/dataStudio/sqlEditor/index.vue'),
         name: 'DataStudioSqlEditor',
         meta: {
           title: 'SQL 编辑器',
@@ -779,7 +779,7 @@ const remainingRouter: AppRouteRecordRaw[] = [
       },
       {
         path: 'data-ingestion',
-        component: () => import('@/views/dataStudio/components/DataIngestion.vue'),
+        component: () => import('@/views/dataStudio/dataIngestion/index.vue'),
         name: 'DataStudioDataIngestion',
         meta: {
           title: '数据摄取',
@@ -789,7 +789,7 @@ const remainingRouter: AppRouteRecordRaw[] = [
       },
       {
         path: 'datasource',
-        component: () => import('@/views/dataStudio/components/DataSourceManagement.vue'),
+        component: () => import('@/views/dataStudio/dataSource/index.vue'),
         name: 'DataStudioDataSource',
         meta: {
           title: '数据源管理',
@@ -799,7 +799,7 @@ const remainingRouter: AppRouteRecordRaw[] = [
       },
       {
         path: 'function',
-        component: () => import('@/views/dataStudio/components/FunctionManagement.vue'),
+        component: () => import('@/views/dataStudio/function/index.vue'),
         name: 'DataStudioFunction',
         meta: {
           title: '函数管理',
@@ -809,7 +809,7 @@ const remainingRouter: AppRouteRecordRaw[] = [
       },
       {
         path: 'resource',
-        component: () => import('@/views/dataStudio/components/ResourceManagement.vue'),
+        component: () => import('@/views/dataStudio/resource/index.vue'),
         name: 'DataStudioResource',
         meta: {
           title: '资源管理',
@@ -819,17 +819,17 @@ const remainingRouter: AppRouteRecordRaw[] = [
       },
       {
         path: 'service',
-        component: () => import('@/views/dataStudio/components/ServiceManagement.vue'),
+        component: () => import('@/views/dataStudio/job/index.vue'),
         name: 'DataStudioService',
         meta: {
-          title: '服务管理',
+          title: '作业管理',
           icon: 'ep:monitor',
           noCache: false
         }
       },
       {
         path: 'flink-cluster',
-        component: () => import('@/views/dataStudio/components/FlinkClusterManagement.vue'),
+        component: () => import('@/views/dataStudio/flinkCluster/index.vue'),
         name: 'DataStudioFlinkCluster',
         meta: {
           title: 'Flink 集群管理',

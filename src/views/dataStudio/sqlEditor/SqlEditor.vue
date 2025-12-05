@@ -1,4 +1,4 @@
-/<template>
+<template>
   <ContentWrap>
     <!-- 主要内容区域：Splitter 布局 -->
     <div class="h-[calc(100vh-120px)] mt-16px">
@@ -33,8 +33,8 @@
                 @contextmenu.prevent="handleNodeContextMenu($event, data)"
               >
                 <el-icon v-if="data.type === 'folder'" class="text-[var(--el-color-primary)]"><FolderOpened /></el-icon>
-                <el-icon v-else-if="data.type === 'yaml'" class="text-[var(--el-color-primary)]"><Document /></el-icon>
-                <el-icon v-else class="text-[var(--el-color-primary)]"><FileText /></el-icon>
+                <el-icon v-else-if="data.type === 'sql'" class="text-[var(--el-color-primary)]"><Document /></el-icon>
+                <el-icon v-else class="text-[var(--el-color-primary)]"><Document /></el-icon>
                 <span>{{ hideFileExtension(data.name, data.type) }}</span>
               </div>
             </template>
@@ -87,20 +87,13 @@
           <el-splitter-panel :min="400" class="flex flex-col">
             <!-- 编辑器工具栏 -->
             <div class="flex-shrink-0 px-16px py-12px border-b border-[var(--el-border-color)] bg-[var(--el-fill-color-light)] flex justify-end items-center gap-8px">
-              <el-button type="primary" size="small" icon="Upload">
-                导入
+              <el-button type="primary" size="small" icon="Promotion" @click="handleDeploy">
+                部署
               </el-button>
-              <el-button type="warning" size="small" icon="Refresh">
-                刷新
+              <el-button type="warning" size="small" icon="Connection">
+                调试
               </el-button>
-              <el-button
-                ref="saveButtonRef"
-                type="success"
-                size="small"
-                icon="DocumentChecked"
-                :loading="isSaving"
-                @click="handleSave"
-              >
+              <el-button ref="saveButtonRef" type="success" size="small" icon="DocumentChecked" @click="handleSave">
                 保存
               </el-button>
             </div>
@@ -122,49 +115,45 @@
                     :name="file.id!.toString()"
                   >
                     <el-splitter class="h-full" >
-                      <el-splitter-panel class="flex flex-col">
+<!--                      编辑器、右侧活动栏、 隐藏的配置页 三个需要在同一个splitter下 不然宽度有问题-->
+
+                      <el-splitter-panel :size="100-toolBarSize" class="flex flex-col">
                         <!-- 编辑器区域 -->
-                        <el-splitter class="h-full" horizontal>
-                          <el-splitter-panel :size="100 - toolBarSize" class="flex flex-col">
-                            <!-- 编辑器主体 -->
-                            <div class="flex-1 flex flex-col">
-                              <MonacoEditor
-                                v-model="file.content"
-                                language="yaml"
-                                :height="'100%'"
-                                :options="editorOptions"
-                                @change="handleContentChange(file)"
-                              />
-                            </div>
-                          </el-splitter-panel>
-
-                          <!-- 动态工具面板 -->
-                          <el-splitter-panel v-if="file.activeToolbarKey" :size="toolBarSize">
-                            <ConfigPanel
-                              v-if="file.activeToolbarKey === 'config'"
-                              :file="file"
-                              @update:config="(newConfig) => handleConfigUpdate(file, newConfig)"
-                            />
-                          </el-splitter-panel>
-
-                          <!-- 细窄的右侧导航栏 -->
-                          <div class="flex flex-col p-2 items-center justify-start h-full w-48 bg-[var(--el-fill-color-light)] border-l border-[var(--el-border-color)]">
-                            <div
-                              v-for="button in toolbarButtons"
-                              :key="button.key"
-                              class="flex items-center gap-2 px-3 py-2 my-1 rounded cursor-pointer hover:bg-[var(--el-fill-color-blank)] w-full transition-colors-300"
-                              :class="{ 'bg-[var(--el-color-primary-light-8)]': file.activeToolbarKey === button.key }"
-                              @click="handleTabToolbarButtonClick(file, button.key)"
-                            >
-                              <el-icon :size="18">
-                                <component :is="button.icon" />
-                              </el-icon>
-                              <span class="text-[var(--el-text-color-primary)]">{{ button.label }}</span>
-                            </div>
-                          </div>
-                        </el-splitter>
+                        <div class="flex-1 flex flex-col">
+                          <MonacoEditor
+                            v-model="file.content"
+                            language="sql"
+                            :height="'100%'"
+                            :options="editorOptions"
+                            @change="handleContentChange(file)"
+                          />
+                        </div>
                       </el-splitter-panel>
-                    </el-splitter>
+
+                      <el-splitter-panel v-if="file.activeToolbarKey" :size="toolBarSize" >
+                        <!-- 动态工具面板   -->
+                        <ConfigPanel
+                          v-if="file.activeToolbarKey === 'config'"
+                          :file="file"
+                          @update:config="(newConfig) => handleConfigUpdate(file, newConfig)"
+                        />
+                      </el-splitter-panel>
+                        <!-- 细窄的右侧导航栏 -->
+                        <div class="flex flex-col p-2 items-center justify-start h-full">
+                          <div
+                            v-for="button in toolbarButtons"
+                            :key="button.key"
+                            class="flex items-center gap-2 px-3 py-2 my-1 rounded cursor-pointer hover:bg-[var(--el-fill-color-light)] w-full"
+                            :class="{ 'bg-[var(--el-color-primary-light-8)]': file.activeToolbarKey === button.key }"
+                            @click="handleTabToolbarButtonClick(file, button.key)"
+                          >
+                            <el-icon :size="18">
+                              <component :is="button.icon" />
+                            </el-icon>
+                            <span class="text-[var(--el-text-color-primary)]">{{ button.label }}</span>
+                          </div>
+                        </div>
+                      </el-splitter >
                   </el-tab-pane>
                 </el-tabs>
               </template>
@@ -207,45 +196,44 @@
         <el-button type="primary" @click="confirmMove">确定</el-button>
       </template>
     </el-dialog>
-
-    <!-- 版本面板 -->
-    <VersionPanel
-      ref="versionPanelRef"
-      v-model="versionPanelVisible"
-      :current-file-id="activeTabId ? Number(activeTabId) : undefined"
-      :file-name="(openedFiles.find(f => f.id?.toString() === activeTabId) as OpenedFile | undefined)?.name"
-      @rollback="handleVersionRollback"
-    />
     </div>
   </ContentWrap>
+
+  <!-- 版本面板 -->
+  <VersionPanel
+    v-model="versionPanelVisible"
+    :current-file-id="activeTabId ? Number(activeTabId) : undefined"
+    :file-name="activeFile?.name"
+    @rollback="handleVersionRollback"
+    @deleted="handleVersionDeleted"
+  />
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useMessage } from '@/hooks/web/useMessage'
 import MonacoEditor from '@/components/monaco-editor/MonacoEditor.vue'
+import VersionPanel from './components/VersionPanel.vue'
 
-import { Search, Clock } from '@element-plus/icons-vue'
-import { Document, EditPen, Delete, Rank, FolderOpened, Close, Setting } from '@element-plus/icons-vue'
+import { Search } from '@element-plus/icons-vue'
+import { Document, EditPen, Delete, Rank, FolderOpened, Setting, DocumentCopy } from '@element-plus/icons-vue'
 import { ElSelect } from 'element-plus'
 import {
-  getDataIngestionTree as getFileTree,
-  createDataIngestion as createFile,
-  deleteDataIngestion as deleteFile,
-  renameDataIngestion as renameFile,
-  moveDataIngestion as moveFile,
-  getDataIngestionContent as getFileContent,
-  getDataIngestionData as getFileData,
-  saveDataIngestionContent as saveFileContent,
-  saveDataIngestionData as saveFileData,
-  generateDataIngestionPath as generateFilePath,
-  getDataIngestionFileType as getFileType,
-  DataIngestionVO as FileManageVO,
-  DataIngestionDataSaveReqVO
-} from '@/api/dataStudio/dataIngestion'
-import { createVersion } from '@/api/dataStudio/dataIngestionVersion'
+  getFileTree,
+  createFile,
+  deleteFile,
+  renameFile,
+  moveFile,
+  getFileContent,
+  saveFileContent,
+  saveFileData,
+  getFileData,
+  generateFilePath,
+  FileManageVO,
+  deployFile
+} from '@/api/dataStudio/file'
+import { getVersionList, VersionItem } from '@/api/dataStudio/version'
 import { ElMessageBox } from 'element-plus'
-import VersionPanel from './dataIngestion/components/VersionPanel.vue'
 import ConfigPanel from '@/components/dataStudio/ConfigPanel.vue'
 
 const message = useMessage() // 消息弹窗
@@ -258,16 +246,14 @@ const searchKeyword = ref('')
 
 // 保存按钮引用
 const saveButtonRef = ref()
-
-// 保存状态（防重复点击）
-const isSaving = ref(false)
+const toolBarSize= ref(0)
 
 // 已打开的文件列表
 interface OpenedFile extends FileManageVO {
   content: string
   isDirty: boolean
-  activeToolbarKey?: string
-  config?: any
+  activeToolbarKey: string | null  // 每个文件独立的工具栏状态
+  config?: any  // 文件配置项
 }
 const openedFiles = ref<OpenedFile[]>([])
 
@@ -286,9 +272,11 @@ const targetFolderId = ref<number>(0)
 
 // 版本面板状态
 const versionPanelVisible = ref(false)
-const versionPanelRef = ref()
 
-// ==================== 工具栏数据 ====================
+// 版本数据
+const versionList = ref<VersionItem[]>([])
+
+// ==================== 工具栏状态 ====================
 
 // 工具栏按钮配置
 const toolbarButtons = [
@@ -300,12 +288,97 @@ const toolbarButtons = [
   {
     key: 'version',
     label: '版本',
-    icon: Clock
+    icon: DocumentCopy
   }
 ]
 
-// 工具栏大小（百分比）
-const toolBarSize = ref(20)
+// ==================== 任务配置数据 ====================
+
+// 默认配置
+const defaultConfig = {
+  executionType: 'stream',
+  deployMode: 'local',
+  flinkVersion: '1.16',
+  parallelism: 1,
+  checkpointInterval: 5000,
+  clusterId: undefined
+}
+
+// 配置版本（用于兼容性升级）
+const CONFIG_VERSION = '1.0'
+
+// 合并配置与默认值，确保向后兼容
+const mergeWithDefaultConfig = (userConfig: any) => {
+  if (!userConfig) {
+    return { ...defaultConfig }
+  }
+
+  return {
+    executionType: userConfig.executionType || defaultConfig.executionType,
+    deployMode: userConfig.deployMode || defaultConfig.deployMode,
+    flinkVersion: userConfig.flinkVersion || defaultConfig.flinkVersion,
+    parallelism: userConfig.parallelism || defaultConfig.parallelism,
+    checkpointInterval: userConfig.checkpointInterval || defaultConfig.checkpointInterval,
+    clusterId: userConfig.clusterId  // 允许为undefined
+  }
+}
+
+// 验证配置项
+const validateConfig = (config: any): boolean => {
+  // 并行度验证
+  if (config.parallelism < 1 || config.parallelism > 1000) {
+    message.warning('并行度必须在 1-1000 之间')
+    return false
+  }
+
+  // 检查点间隔验证
+  if (config.checkpointInterval < 1000) {
+    message.warning('检查点间隔不能小于 1000ms')
+    return false
+  }
+
+  if (config.checkpointInterval > 3600000) {
+    message.warning('检查点间隔不能大于 3600000ms（1小时）')
+    return false
+  }
+
+  // 执行类型验证
+  const validExecutionTypes = ['batch', 'stream']
+  if (!validExecutionTypes.includes(config.executionType)) {
+    message.warning('请选择有效的执行类型')
+    return false
+  }
+
+  // 部署模式验证
+  const validdeployModes = ['local', 'remote', 'yarn-application']
+  if (!validdeployModes.includes(config.deployMode)) {
+    message.warning('请选择有效的部署模式')
+    return false
+  }
+
+  // Flink版本验证（local和yarn-application模式必填）
+  if (config.deployMode === 'local' || config.deployMode === 'yarn-application') {
+    const validVersions = ['1.14', '1.15', '1.16', '1.17', '1.18']
+    if (!config.flinkVersion || !validVersions.includes(config.flinkVersion)) {
+      message.warning('请选择有效的Flink版本')
+      return false
+    }
+  }
+
+  // 集群选择验证（remote和yarn-application模式必填）
+  if (config.deployMode === 'remote' || config.deployMode === 'yarn-application') {
+    if (!config.clusterId) {
+      message.warning('请选择集群')
+      return false
+    }
+  }
+
+  return true
+}
+
+// ==================== 版本历史数据 ====================
+
+
 
 // ==================== 数据加载 ====================
 
@@ -354,14 +427,22 @@ const loadFileTree = async () => {
 // 加载文件内容并添加到已打开文件列表
 const loadFileContent = async (file: FileManageVO) => {
   try {
-    // 使用新的get-data接口获取文件数据和配置信息
+    // 使用 getFileData 获取完整的文件信息（包含配置）
     const fileData = await getFileData(file.id!)
+    let fileContent = fileData.content || ''
+    let fileConfig = fileData.config ? mergeWithDefaultConfig(fileData.config) : undefined
+
+    // 如果没有内容，使用默认模板
+    if (!fileContent) {
+      fileContent = `-- ${file.name}\n-- 文件内容编辑区域\nSELECT * FROM table_name;`
+    }
+
     const newFile: OpenedFile = {
       ...file,
-      content: fileData.content || `# ${file.name}\n# 数据摄取配置\n`,
-      config: fileData.config,
+      content: fileContent,
+      config: fileConfig,
       isDirty: false,
-      activeToolbarKey: undefined
+      activeToolbarKey: null  // 初始化工具栏状态
     }
     openedFiles.value.push(newFile)
     activeTabId.value = file.id!.toString()
@@ -374,6 +455,22 @@ const loadFileContent = async (file: FileManageVO) => {
 // 刷新文件树
 const refreshFileTree = async () => {
   await loadFileTree()
+}
+
+// 加载版本列表
+const loadVersionList = async (fileId: number) => {
+  try {
+    console.log(fileId)
+    const data = await getVersionList({
+      sqlEditId: fileId,
+      current: 1,
+      pageSize: 20
+    })
+    versionList.value = data.list || []
+  } catch (error) {
+    console.error('加载版本列表失败:', error)
+    message.error('加载版本列表失败')
+  }
 }
 
 // ==================== 事件处理 ====================
@@ -410,8 +507,8 @@ const handleDocumentClick = () => {
 
 // 隐藏文件扩展名（用于显示）
 const hideFileExtension = (fileName: string, type: string): string => {
-  if (type === 'yaml') {
-    return fileName.replace(/\.(yaml|yml)$/i, '')
+  if (type === 'sql') {
+    return fileName.replace(/\.sql$/i, '')
   }
   return fileName
 }
@@ -445,7 +542,7 @@ const flattenFolders = (nodes: FileManageVO[], parentPath: string = ''): { value
 const handleCreateFile = async () => {
   const folder = contextMenuTarget.value
   try {
-    const { value: fileName } = await ElMessageBox.prompt('请输入YAML文件名称（无需输入.yaml扩展名）', '新增YAML文件', {
+    const { value: fileName } = await ElMessageBox.prompt('请输入SQL文件名称（无需输入.sql扩展名）', '新增SQL文件', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       inputPattern: /.+/,
@@ -453,10 +550,10 @@ const handleCreateFile = async () => {
     })
 
     const parentId = folder?.type === 'folder' ? folder.id : folder?.parentId || 0
-    // 自动添加 .yaml 扩展名
-    const finalFileName = fileName.endsWith('.yaml') || fileName.endsWith('.yml') ? fileName : `${fileName}.yaml`
-    const filePath = generateFilePath(folder?.filePath || '/datastudio', finalFileName)
-    const type = 'yaml'
+    // 自动添加 .sql 扩展名
+    const finalFileName = fileName.endsWith('.sql') ? fileName : `${fileName}.sql`
+    const filePath = generateFilePath(folder?.filePath || '/project', finalFileName)
+    const type = 'sql'
 
     await createFile({
       name: finalFileName,
@@ -491,7 +588,7 @@ const handleCreateFolder = async () => {
     })
 
     const parentId = folder.id
-    const filePath = generateFilePath(folder?.filePath || '/datastudio', folderName)
+    const filePath = generateFilePath(folder?.filePath || '/project', folderName)
 
     await createFile({
       name: folderName,
@@ -571,8 +668,7 @@ const handleDelete = async () => {
       if (isActive) {
         if (openedFiles.value.length > 0) {
           const newIndex = Math.min(openedIndex, openedFiles.value.length - 1)
-          const newFile = openedFiles.value[newIndex] as OpenedFile
-          activeTabId.value = newFile.id!.toString()
+          activeTabId.value = openedFiles.value[newIndex].id!.toString()
         } else {
           activeTabId.value = null
         }
@@ -622,11 +718,6 @@ const handleSave = async () => {
     return
   }
 
-  // 防重复点击
-  if (isSaving.value) {
-    return
-  }
-
   const currentFile = openedFiles.value.find(f => f.id?.toString() === activeTabId.value)
   if (!currentFile) {
     message.warning('未找到要保存的文件')
@@ -634,86 +725,34 @@ const handleSave = async () => {
   }
 
   try {
-    isSaving.value = true
+    // 使用当前文件的配置数据
+    const configData = currentFile.config || defaultConfig
 
-    // 使用统一的saveData接口，同时保存内容和创建版本
-    // config保存用户在配置面板中修改的Flink配置信息
-    const config = currentFile.config
+    // 验证配置
+    if (!validateConfig(configData)) {
+      return
+    }
 
+    // 使用新的saveFileData方法保存文件和配置
     await saveFileData({
-      id: currentFile.id!,
+      id: currentFile.id,
       name: currentFile.name,
       type: currentFile.type,
       parentId: currentFile.parentId,
       filePath: currentFile.filePath,
       content: currentFile.content,
+      config: mergeWithDefaultConfig(configData),
       sort: currentFile.sort,
-      status: currentFile.status,
-      config: config
+      status: currentFile.status
     })
 
-    // 保存成功后，重新加载文件数据确保同步
-    const fileData = await getFileData(currentFile.id!)
-    currentFile.content = fileData.content || currentFile.content
-    currentFile.config = fileData.config
     currentFile.isDirty = false
-
     message.success('保存成功')
-  } catch (error: any) {
+  } catch (error) {
     console.error('保存失败:', error)
-    message.error(error.message || '保存失败')
-  } finally {
-    isSaving.value = false
+    message.error('保存失败')
   }
 }
-
-// 版本回滚处理
-const handleVersionRollback = async () => {
-  // 重新加载当前文件内容
-  const currentFile = openedFiles.value.find(f => f.id?.toString() === activeTabId.value)
-  if (currentFile) {
-      const fileData = await getFileData(currentFile.id!)
-      // 更新当前文件对象的内容和配置
-      currentFile.content = fileData.content || currentFile.content
-      currentFile.config = fileData.config
-      currentFile.isDirty = false
-
-      // 刷新版本面板的版本列表
-      if (versionPanelRef.value?.refresh) {
-        versionPanelRef.value.refresh()
-      }
-    }
-}
-
-// 工具栏按钮点击事件
-const handleTabToolbarButtonClick = (file: OpenedFile, key: string) => {
-  if (file.activeToolbarKey === key) {
-    // 如果点击的是当前已激活的工具栏，则关闭它
-    file.activeToolbarKey = undefined
-    toolBarSize.value = 0
-  } else {
-    // 如果点击的是版本按钮，先检查是否有激活的文件，然后显示版本面板
-    if (key === 'version') {
-      versionPanelVisible.value = true
-      return
-    }
-
-    // 否则激活对应的工具栏
-    file.activeToolbarKey = key
-    toolBarSize.value = 40
-  }
-
-  // 根据按钮key执行相应操作
-  if (key === 'version') {
-    versionPanelVisible.value = true
-  }
-}
-
-// 处理配置更新
-const handleConfigUpdate = (file: OpenedFile, newConfig: any) => {
-  file.config = newConfig
-}
-
 
 // 编辑器配置
 const editorOptions = {
@@ -779,6 +818,11 @@ const filteredFileTreeData = computed(() => {
   return sortFileTreeData(filtered)
 })
 
+// 获取当前文件
+const activeFile = computed(() => {
+  return openedFiles.value.find(f => f.id?.toString() === activeTabId.value) || null
+})
+
 // 搜索处理
 const handleSearch = () => {
   // 搜索逻辑已在 computed 中处理
@@ -810,8 +854,7 @@ const handleRemoveTab = (tabId: string) => {
   if (activeTabId.value === tabId) {
     if (openedFiles.value.length > 0) {
       const newIndex = Math.min(index, openedFiles.value.length - 1)
-      const newFile = openedFiles.value[newIndex] as OpenedFile
-      activeTabId.value = newFile.id!.toString()
+      activeTabId.value = openedFiles.value[newIndex].id!.toString()
     } else {
       activeTabId.value = null
     }
@@ -823,10 +866,137 @@ const handleTabClick = (tab: any) => {
   activeTabId.value = tab.paneName
 }
 
+// 版本回退处理
+const handleVersionRollback = async () => {
+  // 版本回退成功后，重新加载当前文件内容
+  if (activeFile.value && activeFile.value.id) {
+    try {
+      // 先加载文件数据
+      const fileData = await getFileData(activeFile.value.id)
+      activeFile.value.content = fileData.content || ''
+      activeFile.value.config = mergeWithDefaultConfig(fileData.config)
+      activeFile.value.isDirty = false
+
+      // 确保版本面板能获取到正确的文件ID
+      await nextTick()
+
+      // 重新加载版本列表，添加错误处理
+      if (activeFile.value.id) {
+        try {
+          await loadVersionList(activeFile.value.id)
+        } catch (versionError) {
+          console.error('加载版本列表失败:', versionError)
+          // 不阻塞主流程，版本列表加载失败不影响回退成功提示
+        }
+      }
+    } catch (error) {
+      console.error('重新加载文件失败:', error)
+      message.error('重新加载文件失败')
+    }
+  } else {
+    console.warn('回退失败：当前文件信息不完整', {
+      activeFile: activeFile.value,
+      activeTabId: activeTabId.value
+    })
+    message.warning('当前文件信息不完整，请重新打开文件')
+  }
+}
+
+// 版本删除处理
+const handleVersionDeleted = async () => {
+  // 版本删除后，重新加载版本列表
+  if (activeFile.value && activeFile.value.id) {
+    try {
+      await loadVersionList(activeFile.value.id)
+    } catch (error) {
+      console.error('加载版本列表失败:', error)
+      message.error('加载版本列表失败')
+    }
+  }
+}
+
 // 内容变更处理
 const handleContentChange = (file: OpenedFile) => {
   file.isDirty = true
 }
+
+// 部署处理
+const handleDeploy = async () => {
+  if (!activeTabId.value) {
+    message.warning('请先选择文件')
+    return
+  }
+
+  const currentFile = openedFiles.value.find(f => f.id?.toString() === activeTabId.value)
+  if (!currentFile) {
+    message.warning('未找到要部署的文件')
+    return
+  }
+
+  // 如果文件有未保存的更改，提示用户先保存
+  if (currentFile.isDirty) {
+    try {
+      await ElMessageBox.confirm(
+        '当前文件有未保存的更改，是否先保存再部署？',
+        '提示',
+        {
+          confirmButtonText: '保存并部署',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }
+      )
+      await handleSave()
+    } catch {
+      return
+    }
+  }
+
+  try {
+    const result = await deployFile(currentFile.id!)
+    message.success('部署成功：' + result)
+  } catch (error) {
+    console.error('部署失败:', error)
+    message.error('部署失败')
+  }
+}
+
+// 配置更新处理
+const handleConfigUpdate = (file: OpenedFile, newConfig: any) => {
+  file.config = mergeWithDefaultConfig(newConfig)
+  file.isDirty = true
+}
+
+// 工具栏按钮点击处理（标签页内）
+const handleTabToolbarButtonClick = (file: OpenedFile, key: string) => {
+  // 如果点击当前已激活的，则关闭面板，否则激活新面板
+  // 保存到当前文件的 activeToolbarKey 中
+  if (file.activeToolbarKey === key){
+    file.activeToolbarKey=null
+    toolBarSize.value=0
+  }
+  else {
+    // 如果点击的是版本按钮，先检查是否有激活的文件，然后显示版本面板
+    if (key === 'version') {
+      if (!activeTabId.value) {
+        message.warning('请先选择文件')
+        return
+      }
+      versionPanelVisible.value = true
+      return
+    }
+    file.activeToolbarKey = key
+    toolBarSize.value=40
+  }
+}
+
+// 处理版本面板事件
+const handleVersionPanelEvent = (eventType: string) => {
+  // 当版本面板中的版本被删除后，重新加载版本列表
+  if (eventType === 'deleted' && activeFile.value) {
+    loadVersionList(activeFile.value.id!)
+  }
+}
+
 
 // 组件挂载时初始化
 onMounted(async () => {
@@ -859,7 +1029,6 @@ onUnmounted(() => {
   .el-tabs__content {
     position: relative;
   }
-
   .el-tab-pane {
     height: 100%;
     position: relative;
