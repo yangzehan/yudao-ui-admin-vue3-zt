@@ -108,7 +108,6 @@ const loadClusters = async (type: ClusterType) => {
     clusterLoading.value = true
     const resp = await flinkClusterApi.getList({
       type,
-      status: ClusterStatus.AVAILABLE,  // 仅显示可用集群
       page: 1,
       pageSize: 100
     })

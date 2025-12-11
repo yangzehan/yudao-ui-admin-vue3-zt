@@ -1,331 +1,186 @@
 <template>
-  <div
-    ref="editorContainer"
-    class="monaco-editor-container"
-    :style="{ height: props.height }"
-  ></div>
+  <div ref="editorRef" class="monaco-editor-container"></div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as monaco from 'monaco-editor'
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
-import { language as sqlLanguage } from 'monaco-editor/esm/vs/basic-languages/sql/sql';
+import { ref, watch, onMounted, onBeforeUnmount, shallowRef } from 'vue'
+import { useAppStore } from '@/store/modules/app'
 
-interface Props {
-  modelValue?: string
+
+interface Options extends monaco.editor.IStandaloneEditorConstructionOptions {}
+
+const props = defineProps<{
+  modelValue: string
   language?: string
   theme?: string
-  readonly?: boolean
-  height?: string
-  options?: any
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  modelValue: '',
-  language: 'sql',
-  theme: 'vs-dark',
-  readonly: false,
-  height: '100%'
-})
+  options?: Options
+}>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
-  'change': [value: string]
-  'selectionChange': [selection: any]
+  'editorDidMount': [editor: monaco.editor.IStandaloneCodeEditor]
 }>()
 
-const editorContainer = ref<HTMLElement>()
-let editor: monaco.editor.IStandaloneCodeEditor | null = null
-let keydownHandler: ((e: KeyboardEvent) => void) | null = null
+const editorRef = ref<HTMLElement>()
+const editor = shallowRef<monaco.editor.IStandaloneCodeEditor>()
+const appStore = useAppStore()
 
-// 初始化编辑器
-const initEditor = () => {
-  if (!editorContainer.value) return
+// 获取Monaco主题名称
+const getMonacoTheme = () => {
+  return appStore.isDark ? 'vs-dark' : 'vs'
+}
 
-  // 配置 Monaco Editor Worker
-  self.MonacoEnvironment = {
-    getWorker: function (moduleId, label) {
-      // 根据标签返回对应的 worker 文件路径
-      if (label === 'json') {
-        return new jsonWorker()
+// 配置 SQL 代码模板补全（保持与内置补全共存）
+const configureSqlCompletions = () => {
+  monaco.languages.registerCompletionItemProvider('sql', {
+    provideCompletionItems: async (model, position) => {
+      const word = model.getWordUntilPosition(position)
+      const range = {
+        startLineNumber: position.lineNumber,
+        endLineNumber: position.lineNumber,
+        startColumn: word.startColumn,
+        endColumn: word.endColumn
       }
-      // 默认返回编辑器 worker
-      return new editorWorker()
+
+      const suggestions: any[] = []
+
+      try {
+        // 动态导入 monaco-editor 内置 SQL 语言配置
+        const sqlLanguageModule = await import('monaco-editor/esm/vs/basic-languages/sql/sql.js')
+        const sqlLanguage = sqlLanguageModule.language
+
+        // 获取光标前的内容
+        const { lineNumber, column } = position
+        const textBeforePointer = model.getValueInRange({
+          startLineNumber: lineNumber,
+          startColumn: 0,
+          endLineNumber: lineNumber,
+          endColumn: column,
+        })
+        const contents = textBeforePointer.trim().split(/\s+/)
+        const lastContents = contents[contents?.length - 1]
+
+        if (lastContents) {
+          const sqlConfigKeys = ['builtinFunctions', 'keywords', 'operators']
+          sqlConfigKeys.forEach(key => {
+            if (sqlLanguage[key]) {
+              sqlLanguage[key].forEach((sql: string) => {
+                suggestions.push({
+                  label: sql,
+                  insertText: sql,
+                  kind: key === 'builtinFunctions'
+                    ? monaco.languages.CompletionItemKind.Function
+                    : key === 'keywords'
+                    ? monaco.languages.CompletionItemKind.Keyword
+                    : monaco.languages.CompletionItemKind.Operator,
+                  range: range
+                })
+              })
+            }
+          })
+        }
+      } catch (error) {
+        console.warn('Failed to load built-in SQL completions:', error)
+      }
+
+      return { suggestions }
     }
+  })
+}
+
+onMounted(() => {
+  if (!editorRef.value) return
+
+  // 配置自定义 SQL 代码模板补全（Monaco 内置补全会自动合并）
+  if (props.language === 'sql') {
+    configureSqlCompletions()
   }
 
-  // 创建编辑器实例
-  editor = monaco.editor.create(editorContainer.value, {
-    value: props.modelValue,
-    language: props.language,
-    theme: props.theme,
+  editor.value = monaco.editor.create(editorRef.value, {
+    value: props.modelValue || '',
+    language: props.language || 'javascript',
+    theme: props.theme || getMonacoTheme(),
     automaticLayout: true,
-    fontSize: 14,
-    minimap: {
-      enabled: true
-    },
+    minimap: { enabled: true },
     scrollBeyondLastLine: false,
-    readOnly: props.readonly,
-    wordWrap: 'on',
-    lineNumbers: 'on',
-    glyphMargin: true,
-    folding: true,
-    lineDecorationsWidth: 10,
-    lineNumbersMinChars: 3,
-    renderWhitespace: 'selection',
-    contextmenu: true,
-    selectOnLineNumbers: true,
-    roundedSelection: false,
-    cursorStyle: 'line',
-    cursorBlinking: 'blink',
-    foldingHighlight: true,
-    showFoldingControls: 'always',
+    // 添加滚动条配置以支持滚轮滚动
+    scrollbar: {
+      vertical: 'visible',
+      horizontal: 'visible',
+      useShadows: false,
+      verticalScrollbarSize: 14,
+      horizontalScrollbarSize: 14,
+    },
+    // 启用平滑滚动
     smoothScrolling: true,
+    // 支持 Ctrl+滚轮缩放
+    mouseWheelZoom: true,
     ...props.options
   })
 
-  // 监听内容变化
-  editor.onDidChangeModelContent(() => {
-    const value = editor?.getValue() || ''
+  editor.value.onDidChangeModelContent(() => {
+    const value = editor.value?.getValue() || ''
     emit('update:modelValue', value)
-    emit('change', value)
   })
 
-  // 为 SQL 语言添加智能补全
-  if (props.language === 'sql') {
-    monaco.languages.registerCompletionItemProvider('sql', {
-      provideCompletionItems: (model, position) => {
-        const word = model.getWordUntilPosition(position);
-        const range = {
-          startLineNumber: position.lineNumber,
-          endLineNumber: position.lineNumber,
-          startColumn: word.startColumn,
-          endColumn: word.endColumn
-        };
-        
-        // 获取 SQL 关键字
-        const keywords = sqlLanguage.keywords || [];
-        const functions = sqlLanguage.functions || [];
-        const operators = sqlLanguage.operators || [];
-        const builtinVariables = sqlLanguage.builtinVariables || [];
-        
-        const suggestions = [
-          // 关键字建议
-          ...keywords.map(keyword => ({
-            label: keyword,
-            kind: monaco.languages.CompletionItemKind.Keyword,
-            insertText: keyword,
-            range: range,
-            detail: 'SQL 关键字'
-          })),
-          
-          // 函数建议
-          ...functions.map(func => ({
-            label: func,
-            kind: monaco.languages.CompletionItemKind.Function,
-            insertText: func + '($0)',
-            range: range,
-            detail: 'SQL 函数',
-            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
-          })),
-          
-          // 操作符建议
-          ...operators.map(op => ({
-            label: op,
-            kind: monaco.languages.CompletionItemKind.Operator,
-            insertText: op,
-            range: range,
-            detail: 'SQL 操作符'
-          })),
-          
-          // 内置变量建议
-          ...builtinVariables.map(variable => ({
-            label: variable,
-            kind: monaco.languages.CompletionItemKind.Variable,
-            insertText: variable,
-            range: range,
-            detail: 'SQL 内置变量'
-          }))
-        ];
-        
-        return { suggestions };
-      }
-    });
-  }
+  // 使用 Monaco Editor 的 addAction 注册快捷键
+  editor.value.addAction({
+    id: 'select-current-line',
+    label: '选中当前行',
+    keybindings: [
+      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyR
+    ],
+    run: (ed) => {
+      const position = ed.getPosition()
+      if (!position) return
 
-  // 监听选择变化
-  editor.onDidChangeCursorSelection((e) => {
-    emit('selectionChange', e)
-  })
+      const model = ed.getModel()
+      if (!model) return
 
-  // 添加键盘快捷键处理 - Ctrl+W 选中当前单词
-  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyE, () => {
-    const position = editor.getPosition()
-    if (!position) return
+      const lineNumber = position.lineNumber
+      const lineContent = model.getLineContent(lineNumber)
+      const lineLength = lineContent.length
 
-    const model = editor.getModel()
-    if (!model) return
-
-    const lineContent = model.getLineContent(position.lineNumber)
-
-    // 定义单词字符的正则表达式（包含字母、数字、下划线）
-    const wordRegex = /[a-zA-Z0-9_]/
-
-    // 向前查找单词开始位置
-    let startColumn = position.column
-    while (startColumn > 1 && wordRegex.test(lineContent[startColumn - 2])) {
-      startColumn--
-    }
-
-    // 向后查找单词结束位置
-    let endColumn = position.column
-    while (endColumn <= lineContent.length && wordRegex.test(lineContent[endColumn - 1])) {
-      endColumn++
-    }
-
-    // 如果找到了有效的单词范围，则选中它
-    if (endColumn > startColumn) {
-      editor.setSelection({
-        startLineNumber: position.lineNumber,
-        startColumn: startColumn,
-        endLineNumber: position.lineNumber,
-        endColumn: endColumn
-      })
+      // 选中整行（从行首到行尾）
+      const range = new monaco.Range(lineNumber, 1, lineNumber, lineLength + 1)
+      ed.setSelection(range)
     }
   })
 
-  // 监听DOM键盘事件，确保Ctrl+W不会关闭浏览器标签页
-  keydownHandler = (e: KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
-      e.preventDefault()
-      e.stopPropagation()
+  emit('editorDidMount', editor.value)
+})
+
+watch(
+  () => props.modelValue,
+  (newValue) => {
+    if (editor.value && newValue !== editor.value.getValue()) {
+      editor.value.setValue(newValue || '')
     }
   }
-  editorContainer.value?.addEventListener('keydown', keydownHandler)
-}
+)
 
-// 更新编辑器内容
-const updateContent = (value: string) => {
-  if (editor && editor.getValue() !== value) {
-    editor.setValue(value)
-  }
-}
-
-// 设置语言
-const setLanguage = (language: string) => {
-  if (editor) {
-    const model = editor.getModel()
-    if (model) {
-      monaco.editor.setModelLanguage(model, language)
+// 监听主题变化
+watch(
+  () => appStore.isDark,
+  () => {
+    if (editor.value) {
+      monaco.editor.setTheme(getMonacoTheme())
     }
   }
-}
+)
 
-// 设置主题
-const setTheme = (theme: string) => {
-  monaco.editor.setTheme(theme)
-}
-
-// 获取编辑器内容
-const getContent = () => {
-  return editor?.getValue() || ''
-}
-
-// 格式化代码
-const format = () => {
-  if (editor) {
-    editor.getAction('editor.action.formatDocument')?.run()
-  }
-}
-
-// 全选
-const selectAll = () => {
-  if (editor) {
-    editor.getAction('editor.action.selectAll')?.run()
-  }
-}
-
-// 查找
-const find = () => {
-  if (editor) {
-    editor.getAction('actions.find')?.run()
-  }
-}
-
-// 替换
-const replace = () => {
-  if (editor) {
-    editor.getAction('editor.action.startFindReplaceAction')?.run()
-  }
-}
-
-onMounted(async () => {
-  await nextTick()
-  initEditor()
-})
-
-onUnmounted(() => {
-  if (editor) {
-    editor.dispose()
-    editor = null
-  }
-  if (editorContainer.value && keydownHandler) {
-    editorContainer.value.removeEventListener('keydown', keydownHandler)
-    keydownHandler = null
-  }
-})
-
-// 监听props变化
-watch(() => props.modelValue, (newValue) => {
-  if (editor && editor.getValue() !== newValue) {
-    updateContent(newValue)
-  }
-})
-
-watch(() => props.language, (newLanguage) => {
-  setLanguage(newLanguage)
-})
-
-watch(() => props.theme, (newTheme) => {
-  setTheme(newTheme)
-})
-
-// 暴露方法给父组件
-defineExpose({
-  getContent,
-  setLanguage,
-  setTheme,
-  format,
-  selectAll,
-  find,
-  replace,
-  getEditor: () => editor
+onBeforeUnmount(() => {
+  editor.value?.dispose()
 })
 </script>
 
-<style lang="scss" scoped>
+<style scoped>
 .monaco-editor-container {
   width: 100%;
   height: 100%;
-  border: 1px solid var(--el-border-color);
-  border-radius: 4px;
+  min-height: 300px;
+  /* 确保容器有明确的边界，允许内容滚动 */
   overflow: hidden;
-
-  // 确保编辑器能够正确填充容器
-  :deep(.monaco-editor) {
-    .overflow-guard {
-      height: 100% !important;
-    }
-
-    .monaco-editor-background {
-      height: 100% !important;
-    }
-
-    .monaco-scrollable-element {
-      height: 100% !important;
-    }
-  }
 }
 </style>

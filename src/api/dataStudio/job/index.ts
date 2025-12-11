@@ -5,6 +5,7 @@ export interface Job {
   id?: number
   jobId: string
   jobName: string
+  jobType: string
   status: string
   executionMode?: string
   flinkVersion?: string

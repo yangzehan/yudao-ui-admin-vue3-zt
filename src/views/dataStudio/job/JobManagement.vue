@@ -11,7 +11,7 @@
       <el-table-column prop="name" label="作业名称" width="180" />
       <el-table-column prop="type" label="作业类型" width="120">
         <template #default="{ row }">
-          <el-tag>{{ row.type }}</el-tag>
+          <el-tag>{{ row.jobType }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="status" label="状态" width="100">

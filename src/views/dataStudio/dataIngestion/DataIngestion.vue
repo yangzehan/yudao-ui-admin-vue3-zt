@@ -4,7 +4,7 @@
     <div class="h-[calc(100vh-120px)] mt-16px">
       <el-splitter class="h-full">
       <!-- 左侧文件管理窗口 -->
-      <el-splitter-panel size="20%" :min="200" class="flex flex-col bg-[var(--el-bg-color)]">
+      <el-splitter-panel size="15%" :min="200" class="flex flex-col bg-[var(--el-bg-color)]">
         <!-- 文件管理头部 -->
         <div class="flex-shrink-0 px-16px py-12px border-b border-[var(--el-border-color)] bg-[var(--el-fill-color-light)]">
           <h3 class="m-0 text-14px font-600 text-[var(--el-text-color-primary)]">文件管理</h3>
@@ -86,17 +86,18 @@
           <!-- 中间编辑器区域 -->
           <el-splitter-panel :min="400" class="flex flex-col">
             <!-- 编辑器工具栏 -->
-            <div class="flex-shrink-0 px-16px py-12px border-b border-[var(--el-border-color)] bg-[var(--el-fill-color-light)] flex justify-end items-center gap-8px">
-              <el-button type="primary" size="small" icon="Upload">
+            <div class="flex-shrink-0 px-8px py-6px border-b border-[var(--el-border-color)] bg-[var(--el-bg-color)] flex justify-end items-center gap-6px">
+              <el-button type="primary" size="small" class="h-28px px-12px text-12px" icon="Upload">
                 导入
               </el-button>
-              <el-button type="warning" size="small" icon="Refresh">
+              <el-button type="warning" size="small" class="h-28px px-12px text-12px" icon="Refresh">
                 刷新
               </el-button>
               <el-button
                 ref="saveButtonRef"
                 type="success"
                 size="small"
+                class="h-28px px-12px text-12px"
                 icon="DocumentChecked"
                 :loading="isSaving"
                 @click="handleSave"
@@ -122,12 +123,9 @@
                     :name="file.id!.toString()"
                   >
                     <el-splitter class="h-full" >
-                      <el-splitter-panel class="flex flex-col">
+                      <el-splitter-panel :size="100 - toolBarSize" class="flex flex-col">
                         <!-- 编辑器区域 -->
-                        <el-splitter class="h-full" horizontal>
-                          <el-splitter-panel :size="100 - toolBarSize" class="flex flex-col">
-                            <!-- 编辑器主体 -->
-                            <div class="flex-1 flex flex-col">
+                        <div class="flex-1 flex flex-col">
                               <MonacoEditor
                                 v-model="file.content"
                                 language="yaml"
@@ -135,8 +133,8 @@
                                 :options="editorOptions"
                                 @change="handleContentChange(file)"
                               />
-                            </div>
-                          </el-splitter-panel>
+                        </div>
+                      </el-splitter-panel>
 
                           <!-- 动态工具面板 -->
                           <el-splitter-panel v-if="file.activeToolbarKey" :size="toolBarSize">
@@ -149,22 +147,20 @@
                           </el-splitter-panel>
 
                           <!-- 细窄的右侧导航栏 -->
-                          <div class="flex flex-col p-2 items-center justify-start h-full w-48 bg-[var(--el-fill-color-light)] border-l border-[var(--el-border-color)]">
+                          <div class="flex flex-col p-8px items-center justify-start h-full bg-[var(--el-bg-color)]">
                             <div
                               v-for="button in toolbarButtons"
                               :key="button.key"
-                              class="flex items-center gap-2 px-3 py-2 my-1 rounded cursor-pointer hover:bg-[var(--el-fill-color-blank)] w-full transition-colors-300"
-                              :class="{ 'bg-[var(--el-color-primary-light-8)]': file.activeToolbarKey === button.key }"
+                              class="flex flex-col items-center gap-4px px-8px py-8px my-4px rounded cursor-pointer hover:bg-[var(--el-fill-color-light)] w-full transition-colors-200"
+                              :class="{ 'bg-[var(--el-color-primary-light-9)] text-[var(--el-color-primary)]': file.activeToolbarKey === button.key }"
                               @click="handleTabToolbarButtonClick(file, button.key)"
                             >
-                              <el-icon :size="18">
+                              <el-icon :size="16" class="text-[var(--el-text-color-primary)]">
                                 <component :is="button.icon" />
                               </el-icon>
-                              <span class="text-[var(--el-text-color-primary)]">{{ button.label }}</span>
+                              <span class="text-11px text-[var(--el-text-color-primary)] text-center">{{ button.label }}</span>
                             </div>
                           </div>
-                        </el-splitter>
-                      </el-splitter-panel>
                     </el-splitter>
                   </el-tab-pane>
                 </el-tabs>
@@ -304,7 +300,7 @@ const toolbarButtons = [
 ]
 
 // 工具栏大小（百分比）
-const toolBarSize = ref(20)
+const toolBarSize = ref(0)
 
 // ==================== 数据加载 ====================
 
@@ -699,7 +695,7 @@ const handleTabToolbarButtonClick = (file: OpenedFile, key: string) => {
 
     // 否则激活对应的工具栏
     file.activeToolbarKey = key
-    toolBarSize.value = 40
+    toolBarSize.value = 30
   }
 
   // 根据按钮key执行相应操作
@@ -721,14 +717,14 @@ const editorOptions = {
   automaticLayout: true,
   scrollBeyondLastLine: false,
   wordWrap: 'on',
-  lineNumbers: 'on',
+  lineNumbers: 'on' as const,
   folding: true,
   renderWhitespace: 'selection',
   contextmenu: true,
   selectOnLineNumbers: true,
   roundedSelection: false,
-  cursorStyle: 'line',
-  cursorBlinking: 'blink',
+  cursorStyle: 'line' as const,
+  cursorBlinking: 'blink' as const,
   foldingHighlight: true,
   showFoldingControls: 'always',
   smoothScrolling: true
