@@ -43,7 +43,7 @@
       <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
           <el-button
-            v-if="row.status === 'running'"
+            v-if="isJobStoppable(row.status)"
             size="small"
             type="warning"
             @click="handleStopJob(row)"
@@ -494,6 +494,26 @@ const formatConfigValue = (key: string, value: any): string => {
   return String(value)
 }
 
+// 检查作业是否可停止
+const isJobStoppable = (status: string | undefined): boolean => {
+  if (!status) return false
+
+  // 可停止的状态：正在运行或处理中的状态
+  const stoppableStatuses = [
+    'RUNNING',
+    'INITIALIZING',
+    'RESTARTING',
+    'RECONCILING',
+    'FAILING',
+    'CANCELLING',
+    // 兼容小写
+    'running',
+    'pending'
+  ]
+
+  return stoppableStatuses.includes(status)
+}
+
 // 格式化执行模式
 const formatExecutionMode = (mode: string): string => {
   const modeMap: Record<string, string> = {
@@ -854,7 +874,31 @@ onMounted(() => {
 const getStatusTag = (status: string | undefined) => {
   if (!status) return 'info'
 
+  // 根据后端 JobStatus 枚举进行映射
   const statusMap: Record<string, string> = {
+    // 运行中相关 - 蓝色
+    RUNNING: 'primary',
+    INITIALIZING: 'primary',
+    RESTARTING: 'primary',
+    RECONCILING: 'primary',
+
+    // 成功完成 - 绿色
+    FINISHED: 'success',
+
+    // 失败相关 - 红色
+    FAILED: 'danger',
+    FAILING: 'danger',
+
+    // 取消相关 - 灰色
+    CANCELED: 'info',
+    CANCELLING: 'info',
+    CLOSED: 'info',
+
+    // 等待/暂停 - 橙色
+    CREATED: 'warning',
+    SUSPENDED: 'warning',
+
+    // 兼容旧版本的状态值（小写）
     success: 'success',
     running: 'primary',
     failed: 'danger',
