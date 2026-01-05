@@ -308,11 +308,32 @@
                   />
                 </el-select>
               </el-form-item>
-              <el-form-item label="Hadoop版本">
-                <el-input v-model="clusterForm.hadoopVersion" placeholder="请输入Hadoop版本" />
+              <el-form-item label="Yarn配置路径" prop="yarnSitePath">
+                <el-input v-model="clusterForm.yarnSitePath" placeholder="例如：/etc/hadoop/conf/yarn-site.xml" />
               </el-form-item>
-              <el-form-item label="Yarn地址" prop="yarnUrl">
-                <el-input v-model="clusterForm.yarnUrl" placeholder="例如：http://10.1.1.100:8088" />
+              <el-form-item label="HDFS配置路径" prop="hdfsSitePath">
+                <el-input v-model="clusterForm.hdfsSitePath" placeholder="例如：/etc/hadoop/conf/hdfs-site.xml" />
+              </el-form-item>
+              <el-form-item label="Core配置路径" prop="coreSitePath">
+                <el-input v-model="clusterForm.coreSitePath" placeholder="例如：/etc/hadoop/conf/core-site.xml" />
+              </el-form-item>
+              <el-form-item label="预上传Lib目录">
+                <el-input
+                  v-model="clusterForm.yarnProvidedLibDirs"
+                  placeholder="多个目录用分号分隔，例如：hdfs://namenode:8020/lib/flink:hdfs://namenode:8020/lib/custom"
+                />
+              </el-form-item>
+              <el-form-item label="用户Lib目录">
+                <el-input
+                  v-model="clusterForm.yarnProvidedUsrLibDir"
+                  placeholder="例如：hdfs://namenode:8020/userlib"
+                />
+              </el-form-item>
+              <el-form-item label="Flink Dist Jar" :rules="clusterForm.deployMode === 'application' ? [{ required: true, message: '请输入Flink Dist Jar路径', trigger: 'blur' }] : []">
+                <el-input
+                  v-model="clusterForm.yarnFlinkDistJar"
+                  placeholder="例如：hdfs://namenode:8020/flink-dist/flink-dist-1.18.jar"
+                />
               </el-form-item>
               <el-form-item label="队列名称" prop="queueName">
                 <el-input v-model="clusterForm.queueName" placeholder="默认：default" />
@@ -324,8 +345,14 @@
                   <el-option label="Application" value="application" />
                 </el-select>
               </el-form-item>
-              <el-form-item label="内存(MB)">
-                <el-input-number v-model="clusterForm.memoryMB" :min="1024" :step="1024" style="width: 100%" />
+              <el-form-item label="JobManager内存(MB)">
+                <el-input-number v-model="clusterForm.jobmanagerMemoryProcessSize" :min="1024" :step="1024" style="width: 100%" />
+              </el-form-item>
+              <el-form-item label="TaskManager内存(MB)">
+                <el-input-number v-model="clusterForm.taskmanagerMemoryProcessSize" :min="1024" :step="1024" style="width: 100%" />
+              </el-form-item>
+              <el-form-item label="TaskManager Slot数">
+                <el-input-number v-model="clusterForm.taskmanagerNumberOfTaskSlots" :min="1" style="width: 100%" />
               </el-form-item>
               <el-form-item label="CPU核心数">
                 <el-input-number v-model="clusterForm.vcores" :min="1" style="width: 100%" />
@@ -416,11 +443,17 @@
         </template>
         <template v-else>
           <el-descriptions-item label="Flink版本">{{ detailCluster.flinkVersion || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Hadoop版本">{{ detailCluster.hadoopVersion || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Yarn地址" :span="2">{{ detailCluster.yarnUrl || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="Yarn配置路径">{{ detailCluster.yarnSitePath || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="HDFS配置路径">{{ detailCluster.hdfsSitePath || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="Core配置路径">{{ detailCluster.coreSitePath || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="Provided Lib目录">{{ detailCluster.yarnProvidedLibDirs || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="用户Lib目录">{{ detailCluster.yarnProvidedUsrLibDir || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="Flink Dist Jar">{{ detailCluster.yarnFlinkDistJar || '-' }}</el-descriptions-item>
           <el-descriptions-item label="队列名称">{{ detailCluster.queueName || 'default' }}</el-descriptions-item>
           <el-descriptions-item label="部署模式">{{ detailCluster.deployMode || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="内存(MB)">{{ detailCluster.memoryMB || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="JobManager内存(MB)">{{ detailCluster.jobmanagerMemoryProcessSize || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="TaskManager内存(MB)">{{ detailCluster.taskmanagerMemoryProcessSize || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="TaskManager Slot数">{{ detailCluster.taskmanagerNumberOfTaskSlots || '-' }}</el-descriptions-item>
           <el-descriptions-item label="CPU核心">{{ detailCluster.vcores || '-' }}</el-descriptions-item>
         </template>
         <el-descriptions-item label="最大并行度">{{ detailCluster.maxParallelism || '-' }}</el-descriptions-item>
@@ -524,11 +557,17 @@ const clusterForm = reactive<FlinkCluster>({
   webUiUrl: '',
   haEnabled: false,
   zkNamespace: '',
-  yarnUrl: '',
   queueName: 'default',
   deployMode: 'session',
-  hadoopVersion: '',
-  memoryMB: undefined,
+  yarnSitePath: '',
+  hdfsSitePath: '',
+  coreSitePath: '',
+  yarnProvidedLibDirs: '',
+  yarnProvidedUsrLibDir: '',
+  yarnFlinkDistJar: '',
+  jobmanagerMemoryProcessSize: 1600,
+  taskmanagerMemoryProcessSize: 4096,
+  taskmanagerNumberOfTaskSlots: 2,
   vcores: undefined,
   maxParallelism: undefined,
   connectTimeout: 30000,
@@ -562,8 +601,14 @@ const yarnFormRules: FormRules = {
   flinkVersion: [
     { required: true, message: '请选择Flink版本', trigger: 'change' }
   ],
-  yarnUrl: [
-    { required: true, message: '请输入Yarn地址', trigger: 'blur' }
+  yarnSitePath: [
+    { required: true, message: '请输入Yarn配置路径', trigger: 'blur' }
+  ],
+  hdfsSitePath: [
+    { required: true, message: '请输入HDFS配置路径', trigger: 'blur' }
+  ],
+  coreSitePath: [
+    { required: true, message: '请输入Core配置路径', trigger: 'blur' }
   ],
   queueName: [
     { required: true, message: '请输入队列名称', trigger: 'blur' }
@@ -846,11 +891,17 @@ const resetForm = () => {
     webUiUrl: '',
     haEnabled: false,
     zkNamespace: '',
-    yarnUrl: '',
     queueName: 'default',
     deployMode: 'session',
-    hadoopVersion: '',
-    memoryMB: undefined,
+    yarnSitePath: '',
+    hdfsSitePath: '',
+    coreSitePath: '',
+    yarnProvidedLibDirs: '',
+    yarnProvidedUsrLibDir: '',
+    yarnFlinkDistJar: '',
+    jobmanagerMemoryProcessSize: 1600,
+    taskmanagerMemoryProcessSize: 4096,
+    taskmanagerNumberOfTaskSlots: 2,
     vcores: undefined,
     maxParallelism: undefined,
     connectTimeout: 30000,
@@ -866,7 +917,9 @@ const handleTypeChange = (type: ClusterType) => {
     clusterForm.remoteUrl = ''
     clusterForm.webUiUrl = ''
   } else {
-    clusterForm.yarnUrl = ''
+    clusterForm.yarnSitePath = ''
+    clusterForm.hdfsSitePath = ''
+    clusterForm.coreSitePath = ''
     clusterForm.queueName = 'default'
     clusterForm.deployMode = 'session'
   }

@@ -44,13 +44,19 @@ export interface FlinkCluster {
   zkNamespace?: string
 
   // Yarn集群特有字段
-  yarnUrl?: string
   queueName?: string
   deployMode?: DeployMode
-  hadoopVersion?: string
+  yarnSitePath?: string
+  hdfsSitePath?: string
+  coreSitePath?: string
+  yarnProvidedLibDirs?: string
+  yarnProvidedUsrLibDir?: string
+  yarnFlinkDistJar?: string
 
   // 资源信息
-  memoryMB?: number
+  jobmanagerMemoryProcessSize?: number
+  taskmanagerMemoryProcessSize?: number
+  taskmanagerNumberOfTaskSlots?: number
   vcores?: number
   maxParallelism?: number
 
