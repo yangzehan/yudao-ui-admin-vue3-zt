@@ -52,6 +52,7 @@ export interface FlinkCluster {
   yarnProvidedLibDirs?: string
   yarnProvidedUsrLibDir?: string
   yarnFlinkDistJar?: string
+  yarnAppLogConfigPath?: string
 
   // 资源信息
   jobmanagerMemoryProcessSize?: number

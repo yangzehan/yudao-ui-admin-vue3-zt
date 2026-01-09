@@ -335,6 +335,16 @@
                   placeholder="例如：hdfs://namenode:8020/flink-dist/flink-dist-1.18.jar"
                 />
               </el-form-item>
+              <el-form-item
+                v-if="clusterForm.deployMode === 'application'"
+                label="应用日志配置文件路径"
+                :rules="[{ required: true, message: '请输入应用日志配置文件路径', trigger: 'blur' }]"
+              >
+                <el-input
+                  v-model="clusterForm.yarnAppLogConfigPath"
+                  placeholder="例如：hdfs://namenode:8020/flink-conf/log4j2.xml"
+                />
+              </el-form-item>
               <el-form-item label="队列名称" prop="queueName">
                 <el-input v-model="clusterForm.queueName" placeholder="默认：default" />
               </el-form-item>
@@ -449,6 +459,7 @@
           <el-descriptions-item label="Provided Lib目录">{{ detailCluster.yarnProvidedLibDirs || '-' }}</el-descriptions-item>
           <el-descriptions-item label="用户Lib目录">{{ detailCluster.yarnProvidedUsrLibDir || '-' }}</el-descriptions-item>
           <el-descriptions-item label="Flink Dist Jar">{{ detailCluster.yarnFlinkDistJar || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="应用日志配置文件路径">{{ detailCluster.yarnAppLogConfigPath || '-' }}</el-descriptions-item>
           <el-descriptions-item label="队列名称">{{ detailCluster.queueName || 'default' }}</el-descriptions-item>
           <el-descriptions-item label="部署模式">{{ detailCluster.deployMode || '-' }}</el-descriptions-item>
           <el-descriptions-item label="JobManager内存(MB)">{{ detailCluster.jobmanagerMemoryProcessSize || '-' }}</el-descriptions-item>
@@ -565,6 +576,7 @@ const clusterForm = reactive<FlinkCluster>({
   yarnProvidedLibDirs: '',
   yarnProvidedUsrLibDir: '',
   yarnFlinkDistJar: '',
+  yarnAppLogConfigPath: '',
   jobmanagerMemoryProcessSize: 1600,
   taskmanagerMemoryProcessSize: 4096,
   taskmanagerNumberOfTaskSlots: 2,
@@ -899,6 +911,7 @@ const resetForm = () => {
     yarnProvidedLibDirs: '',
     yarnProvidedUsrLibDir: '',
     yarnFlinkDistJar: '',
+    yarnAppLogConfigPath: '',
     jobmanagerMemoryProcessSize: 1600,
     taskmanagerMemoryProcessSize: 4096,
     taskmanagerNumberOfTaskSlots: 2,
