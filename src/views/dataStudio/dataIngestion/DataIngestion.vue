@@ -87,10 +87,17 @@
           <el-splitter-panel :min="400" class="flex flex-col">
             <!-- 编辑器工具栏 -->
             <div class="flex-shrink-0 px-8px py-6px border-b border-[var(--el-border-color)] bg-[var(--el-bg-color)] flex justify-end items-center gap-6px">
-              <el-button type="primary" size="small" class="h-28px px-12px text-12px" icon="Upload">
-                导入
+              <el-button
+                type="primary"
+                size="small"
+                class="h-28px px-12px text-12px"
+                :icon="VideoPlay"
+                :loading="isDeploying"
+                @click="handleDeploy"
+              >
+                部署
               </el-button>
-              <el-button type="warning" size="small" class="h-28px px-12px text-12px" icon="Refresh">
+              <el-button type="warning" size="small" class="h-28px px-12px text-12px" :icon="Refresh">
                 刷新
               </el-button>
               <el-button
@@ -98,7 +105,7 @@
                 type="success"
                 size="small"
                 class="h-28px px-12px text-12px"
-                icon="DocumentChecked"
+                :icon="DocumentChecked"
                 :loading="isSaving"
                 @click="handleSave"
               >
@@ -222,8 +229,8 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useMessage } from '@/hooks/web/useMessage'
 import MonacoEditor from '@/components/monaco-editor/MonacoEditor.vue'
 
-import { Search, Clock } from '@element-plus/icons-vue'
-import { Document, EditPen, Delete, Rank, FolderOpened, Setting } from '@element-plus/icons-vue'
+import { Search, Clock, Refresh, DocumentChecked } from '@element-plus/icons-vue'
+import { Document, EditPen, Delete, Rank, FolderOpened, Setting, VideoPlay } from '@element-plus/icons-vue'
 import { ElSelect } from 'element-plus'
 import {
   getDataIngestionTree as getFileTree,
@@ -236,6 +243,7 @@ import {
 
   saveDataIngestionData as saveFileData,
   generateDataIngestionPath as generateFilePath,
+  deployDataIngestion as deployFile,
 
   DataIngestionVO as FileManageVO
 } from '@/api/dataStudio/dataIngestion'
@@ -256,6 +264,9 @@ const saveButtonRef = ref()
 
 // 保存状态（防重复点击）
 const isSaving = ref(false)
+
+// 部署状态（防重复点击）
+const isDeploying = ref(false)
 
 // 已打开的文件列表
 interface OpenedFile extends FileManageVO {
@@ -659,6 +670,44 @@ const handleSave = async () => {
     message.error(error.message || '保存失败')
   } finally {
     isSaving.value = false
+  }
+}
+
+// 部署处理
+const handleDeploy = async () => {
+  if (!activeTabId.value) {
+    message.warning('请先选择文件')
+    return
+  }
+
+  // 防重复点击
+  if (isDeploying.value) {
+    return
+  }
+
+  const currentFile = openedFiles.value.find(f => f.id?.toString() === activeTabId.value)
+  if (!currentFile) {
+    message.warning('未找到要部署的文件')
+    return
+  }
+
+  // 文件必须是 YAML 类型才能部署
+  if (currentFile.type !== 'yaml') {
+    message.warning('只有 YAML 类型的文件才能部署')
+    return
+  }
+
+  try {
+    isDeploying.value = true
+
+    await deployFile(currentFile.id!)
+
+    message.success('部署成功')
+  } catch (error: any) {
+    console.error('部署失败:', error)
+    message.error(error.message || '部署失败')
+  } finally {
+    isDeploying.value = false
   }
 }
 

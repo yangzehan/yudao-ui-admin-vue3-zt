@@ -14,11 +14,13 @@ const props = defineProps<{
     [key: string]: any
   }
   showExecutionType?: boolean  // 是否显示执行类型选项
+  showFlinkCdcDistJarPath?: boolean  // 是否显示Flink CDC Dist Jar包路径字段（仅数据集成页面显示）
 }>()
 
 // 默认值
 const propsWithDefaults = computed(() => ({
-  showExecutionType: props.showExecutionType ?? true  // 默认显示执行类型
+  showExecutionType: props.showExecutionType ?? true,  // 默认显示执行类型
+  showCdcDistJarPath: props.showFlinkCdcDistJarPath ?? true  // 默认显示CDC Jar路径
 }))
 
 // 定义emit事件
@@ -33,7 +35,9 @@ const configData = ref({
   flinkVersion: '1.16',
   parallelism: 1,
   checkpointInterval: 5000,
-  clusterId: undefined as number | undefined
+  checkpointPath: '',  // 检查点路径，不填则使用后端默认配置
+  clusterId: undefined as number | undefined,
+  savepointPath: ''  // 保存点路径，不填则使用后端默认配置
 })
 
 // 监听 showExecutionType 变化，决定是否保留 executionType
@@ -75,6 +79,11 @@ watch(configData, (newConfig) => {
     emit('update:config', { ...newConfig })
   }
 }, { deep: true })
+
+// 是否显示Flink CDC Dist Jar包路径（仅yarn-application模式且props为true时显示）
+const shouldShowCdcDistJarPath = computed(() => {
+  return propsWithDefaults.value.showCdcDistJarPath && configData.value.deployMode === 'yarn-application'
+})
 
 // 是否显示Flink版本选择
 const showFlinkVersion = computed(() => {
@@ -179,6 +188,14 @@ const validateConfig = (config: typeof configData.value): boolean => {
   if (config.deployMode === 'remote' || config.deployMode === 'yarn-application') {
     if (!config.clusterId) {
       ElMessage.warning('请选择集群')
+      return false
+    }
+  }
+
+  // Flink CDC Dist Jar包路径验证（yarn-application模式必填）
+  if (config.deployMode === 'yarn-application') {
+    if (!config.flinkCdcDistJarPath || !config.flinkCdcDistJarPath.trim()) {
+      ElMessage.warning('请填写Flink CDC Dist Jar包路径')
       return false
     }
   }
@@ -306,6 +323,23 @@ defineExpose({
           </el-select>
         </div>
 
+        <!-- Flink CDC Dist Jar包路径（仅yarn-application模式显示） -->
+        <div v-if="shouldShowCdcDistJarPath">
+          <div class="flex items-center gap-8px mb-8px">
+            <label class="text-14px font-600 text-[var(--el-text-color-primary)]">flink cdc dist jar包路径</label>
+            <el-tooltip content="填写Flink CDC Dist的JAR包路径，用于CDC数据同步" placement="top">
+              <el-icon class="text-[var(--el-text-color-placeholder)] cursor-help" :size="14">
+                <QuestionFilled />
+              </el-icon>
+            </el-tooltip>
+          </div>
+          <el-input
+            v-model="configData.flinkCdcDistJarPath"
+            placeholder="请输入flink cdc dist jar包路径"
+            class="w-full"
+          />
+        </div>
+
         <!-- 并行度 -->
         <div>
           <div class="flex items-center gap-8px mb-8px">
@@ -332,6 +366,24 @@ defineExpose({
           <el-input-number v-model="configData.checkpointInterval" :min="1000" :max="3600000" :step="1000" class="w-full" />
         </div>
 
+        <!-- 检查点路径（所有部署模式显示） -->
+        <div>
+          <div class="flex items-center gap-8px mb-8px">
+            <label class="text-14px font-600 text-[var(--el-text-color-primary)]">检查点路径</label>
+            <el-tooltip content="设置Flink检查点的存储路径，不填则使用后端默认配置" placement="top">
+              <el-icon class="text-[var(--el-text-color-placeholder)] cursor-help" :size="14">
+                <QuestionFilled />
+              </el-icon>
+            </el-tooltip>
+          </div>
+          <el-input
+            v-model="configData.checkpointPath"
+            placeholder="请输入检查点路径，如 hdfs://namenode:8020/flink/checkpoints"
+            class="w-full"
+            clearable
+          />
+        </div>
+
         <!-- 配置说明 -->
         <div class="mt-24px p-12px bg-[var(--el-fill-color-light)] rounded-4px border border-[var(--el-border-color)]">
           <div class="flex items-center gap-8px mb-8px">
@@ -342,6 +394,7 @@ defineExpose({
             <li>• 配置修改后需要点击文件保存按钮才会生效</li>
             <li>• 并行度影响任务执行性能，建议根据集群资源调整</li>
             <li>• 检查点用于容错，间隔过小可能影响性能</li>
+            <li>• 检查点路径不填时使用后端默认配置</li>
             <li>• 配置项以JSON格式存储，支持未来扩展</li>
           </ul>
         </div>

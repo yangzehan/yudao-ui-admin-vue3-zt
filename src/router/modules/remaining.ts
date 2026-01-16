@@ -836,6 +836,16 @@ const remainingRouter: AppRouteRecordRaw[] = [
           icon: 'ep:cloudy',
           noCache: false
         }
+      },
+      {
+        path: 'template',
+        component: () => import('@/views/dataStudio/template/index.vue'),
+        name: 'DataStudioTemplate',
+        meta: {
+          title: '模板管理',
+          icon: 'ep:document-copy',
+          noCache: false
+        }
       }
     ]
   }

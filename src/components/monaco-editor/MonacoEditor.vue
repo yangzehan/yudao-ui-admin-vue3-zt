@@ -116,6 +116,11 @@ onMounted(() => {
     smoothScrolling: true,
     // 支持 Ctrl+滚轮缩放
     mouseWheelZoom: true,
+    // 禁用默认的 Ctrl+S 等保存相关快捷键，避免与外部保存逻辑冲突
+    keybindings: {
+      default: [],
+      added: []
+    },
     ...props.options
   })
 

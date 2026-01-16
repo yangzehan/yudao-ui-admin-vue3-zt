@@ -130,6 +130,11 @@ export const getDataIngestionData = (id: number): Promise<DataIngestionDataSaveR
   return request.get({ url: '/data-ingestion/get-data', params: { id } })
 }
 
+// 部署数据摄取任务
+export const deployDataIngestion = (id: number): Promise<boolean> => {
+  return request.get({ url: `/data-ingestion/deploy/${id}` })
+}
+
 // ==================== 工具方法 ====================
 
 // 根据类型获取图标名称

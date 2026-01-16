@@ -87,13 +87,13 @@
           <el-splitter-panel :min="400" class="flex flex-col">
             <!-- 编辑器工具栏 -->
             <div class="flex-shrink-0 px-8px py-6px border-b border-[var(--el-border-color)] bg-[var(--el-bg-color)] flex justify-end items-center gap-6px">
-              <el-button type="primary" size="small" class="h-28px px-12px text-12px" icon="Promotion" @click="handleDeploy">
+              <el-button type="primary" size="small" class="h-28px px-12px text-12px" :icon="VideoPlay" @click="handleDeploy">
                 部署
               </el-button>
               <el-button type="warning" size="small" class="h-28px px-12px text-12px" icon="Connection">
                 调试
               </el-button>
-              <el-button ref="saveButtonRef" type="success" size="small" class="h-28px px-12px text-12px" icon="DocumentChecked" @click="handleSave">
+              <el-button ref="saveButtonRef" type="success" size="small" class="h-28px px-12px text-12px" :icon="DocumentChecked" @click="handleSave">
                 保存
               </el-button>
             </div>
@@ -135,6 +135,7 @@
                         <ConfigPanel
                           v-if="file.activeToolbarKey === 'config'"
                           :file="file"
+                          :show-flink-cdc-dist-jar-path="false"
                           @update:config="(newConfig) => handleConfigUpdate(file, newConfig)"
                         />
                       </el-splitter-panel>
@@ -207,15 +208,31 @@
     @rollback="handleVersionRollback"
     @deleted="handleVersionDeleted"
   />
+
+  <!-- 模板选择弹窗 -->
+  <SqlTemplateSelectDialog
+    v-model="templateDialogVisible"
+    @select="handleTemplateSelect"
+  />
+
+  <!-- 占位符填充弹窗 -->
+  <SqlPlaceholderDialog
+    v-model="placeholderDialogVisible"
+    :template="placeholderTemplate"
+    @submit="handlePlaceholderSubmit"
+  />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useMessage } from '@/hooks/web/useMessage'
+import { useUserStore } from '@/store/modules/user'
 import MonacoEditor from '@/components/monaco-editor/MonacoEditor.vue'
 import VersionPanel from './components/VersionPanel.vue'
+import SqlTemplateSelectDialog from './components/SqlTemplateSelectDialog.vue'
+import SqlPlaceholderDialog from './components/SqlPlaceholderDialog.vue'
 
-import { Search } from '@element-plus/icons-vue'
+import { Search, DocumentChecked, VideoPlay } from '@element-plus/icons-vue'
 import { Document, EditPen, Delete, Rank, FolderOpened, Setting, DocumentCopy } from '@element-plus/icons-vue'
 import { ElSelect } from 'element-plus'
 import {
@@ -231,10 +248,51 @@ import {
   deployFile
 } from '@/api/dataStudio/file'
 import { getVersionList, VersionItem } from '@/api/dataStudio/version'
+import { createFileFromTemplate, SqlTemplateDetailVO } from '@/api/dataStudio/template'
 import { ElMessageBox } from 'element-plus'
 import ConfigPanel from '@/components/dataStudio/ConfigPanel.vue'
 
 const message = useMessage() // 消息弹窗
+const userStore = useUserStore() // 用户状态
+
+// ==================== 模板头配置 ====================
+
+// 生成模板头
+const generateTemplateHeader = (fileName: string): string => {
+  const now = new Date()
+  const createTime = now.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  }).replace(/\//g, '-')
+
+  const creator = userStore.getUser?.nickname  || '未知用户'
+
+  return `-- ============================================
+-- 文件名称: ${fileName}
+-- 创建时间: ${createTime}
+-- 创建人员: ${creator}
+-- 文件描述:
+-- ============================================
+
+`
+}
+
+// 检查内容是否已有模板头
+const hasTemplateHeader = (content: string): boolean => {
+  return /^\s*--\s*文件名称:/.test(content)
+}
+
+// 为内容添加模板头（如果还没有的话）
+const addTemplateHeader = (content: string, fileName: string): string => {
+  if (hasTemplateHeader(content)) {
+    return content
+  }
+  return generateTemplateHeader(fileName) + content
+}
 
 // 文件树数据
 const fileTreeData = ref<FileManageVO[]>([])
@@ -274,6 +332,20 @@ const versionPanelVisible = ref(false)
 // 版本数据
 const versionList = ref<VersionItem[]>([])
 
+// ==================== 模板相关状态 ====================
+
+// 模板选择弹窗
+const templateDialogVisible = ref(false)
+const templateDialogParentFolder = ref<FileManageVO | null>(null)
+
+// 占位符填充弹窗
+const placeholderDialogVisible = ref(false)
+const placeholderTemplate = ref<SqlTemplateDetailVO | null>(null)
+
+
+const pendingFileName = ref('')
+const pendingPlaceholderValues = ref<Record<string, string>>({})
+
 // ==================== 工具栏状态 ====================
 
 // 工具栏按钮配置
@@ -299,6 +371,7 @@ const defaultConfig = {
   flinkVersion: '1.16',
   parallelism: 1,
   checkpointInterval: 5000,
+  checkpointPath: '',
   clusterId: undefined
 }
 
@@ -314,6 +387,7 @@ const mergeWithDefaultConfig = (userConfig: any) => {
     flinkVersion: userConfig.flinkVersion || defaultConfig.flinkVersion,
     parallelism: userConfig.parallelism || defaultConfig.parallelism,
     checkpointInterval: userConfig.checkpointInterval || defaultConfig.checkpointInterval,
+    checkpointPath: userConfig.checkpointPath || defaultConfig.checkpointPath,
     clusterId: userConfig.clusterId  // 允许为undefined
   }
 }
@@ -533,41 +607,108 @@ const flattenFolders = (nodes: FileManageVO[], parentPath: string = ''): { value
 
 // ==================== 右键菜单操作 ====================
 
-// 新增文件
-const handleCreateFile = async () => {
+// 新增文件 - 打开模板选择弹窗
+const handleCreateFile = () => {
   const folder = contextMenuTarget.value
+  templateDialogParentFolder.value = folder
+  templateDialogVisible.value = true
+  hideContextMenu()
+}
+
+// 处理模板选择
+const handleTemplateSelect = async (template: SqlTemplateDetailVO) => {
+  // 检查模板中是否有占位符
+  const hasPlaceholders = template.content && template.content.includes('${')
+
+  if (hasPlaceholders) {
+    // 有占位符，打开占位符填充弹窗
+    placeholderTemplate.value = template
+    placeholderDialogVisible.value = true
+  } else {
+    // 没有占位符，直接弹出文件命名对话框
+    openNamingDialog(template, {})
+  }
+}
+
+// 打开文件命名对话框
+const openNamingDialog = (template: SqlTemplateDetailVO, placeholderValues: Record<string, string>) => {
+  placeholderTemplate.value = template
+  pendingPlaceholderValues.value = placeholderValues
+  pendingFileName.value = ''
+
+  // 弹出文件命名对话框
+  ElMessageBox.prompt('请输入SQL文件名称（无需输入.sql扩展名）', '新建SQL文件', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    inputPattern: /.+/,
+    inputErrorMessage: '文件名称不能为空',
+    inputValue: template.name.replace(/\.sql$/i, '')
+  }).then(async ({ value }) => {
+    await confirmCreateFile(value)
+  }).catch(() => {
+    // 用户取消
+  })
+}
+
+// 确认创建文件
+const confirmCreateFile = async (fileName: string) => {
+  if (!placeholderTemplate.value) return
+
+  const folder = templateDialogParentFolder.value
+  const parentId = folder?.type === 'folder' ? folder.id : folder?.parentId || 0
+  const finalFileName = fileName.endsWith('.sql') ? fileName : `${fileName}.sql`
+
   try {
-    const { value: fileName } = await ElMessageBox.prompt('请输入SQL文件名称（无需输入.sql扩展名）', '新增SQL文件', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      inputPattern: /.+/,
-      inputErrorMessage: '文件名称不能为空'
-    })
-
-    const parentId = folder?.type === 'folder' ? folder.id : folder?.parentId || 0
-    // 自动添加 .sql 扩展名
-    const finalFileName = fileName.endsWith('.sql') ? fileName : `${fileName}.sql`
-    const filePath = generateFilePath(folder?.filePath || '/project', finalFileName)
-    const type = 'sql'
-
-    await createFile({
-      name: finalFileName,
-      type,
+    const fileId = await createFileFromTemplate({
+      templateId: placeholderTemplate.value.id!,
+      fileName: finalFileName,
       parentId,
-      filePath,
-      sort: 0,
-      status: 1
+      placeholderValues: pendingPlaceholderValues.value
     })
 
     message.success('创建成功')
     await refreshFileTree()
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('创建文件失败:', error)
-      message.error('创建文件失败')
+
+    // 获取新创建的文件内容，添加模板头并保存
+    const newFileData = await getFileData(fileId)
+    let fileContent = newFileData.content || ''
+
+    // 为文件内容添加模板头
+    fileContent = addTemplateHeader(fileContent, finalFileName)
+
+    // 保存添加了模板头的文件内容
+    await saveFileData({
+      id: fileId,
+      name: finalFileName,
+      type: 'sql',
+      parentId,
+      filePath: newFileData.filePath,
+      content: fileContent,
+      config: {},
+      sort: 0,
+      status: 1
+    })
+
+    // 打开新创建的文件
+    const newFile = fileTreeData.value.find(f => f.id === fileId)
+    if (newFile) {
+      await loadFileContent(newFile)
     }
-  } finally {
-    hideContextMenu()
+  } catch (error) {
+    console.error('创建文件失败:', error)
+    message.error('创建文件失败')
+  }
+
+  // 重置状态
+  placeholderTemplate.value = null
+  pendingPlaceholderValues.value = {}
+  pendingFileName.value = ''
+}
+
+// 处理占位符填充完成
+const handlePlaceholderSubmit = (placeholderValues: Record<string, string>, fileName: string) => {
+  if (placeholderTemplate.value) {
+    openNamingDialog(placeholderTemplate.value, placeholderValues)
   }
 }
 
@@ -708,8 +849,13 @@ const confirmMove = async () => {
 
 // 保存处理
 const handleSave = async () => {
+  // 如果没有打开的文件，直接返回（无需提示）
+  if (openedFiles.value.length === 0) {
+    return
+  }
+
+  // 检查是否有激活的标签页
   if (!activeTabId.value) {
-    message.warning('请先选择文件')
     return
   }
 
@@ -984,13 +1130,7 @@ const handleTabToolbarButtonClick = (file: OpenedFile, key: string) => {
   }
 }
 
-// 处理版本面板事件
-const handleVersionPanelEvent = (eventType: string) => {
-  // 当版本面板中的版本被删除后，重新加载版本列表
-  if (eventType === 'deleted' && activeFile.value) {
-    loadVersionList(activeFile.value.id!)
-  }
-}
+
 
 
 // 组件挂载时初始化
