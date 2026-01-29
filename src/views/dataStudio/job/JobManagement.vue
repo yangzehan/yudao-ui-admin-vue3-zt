@@ -499,16 +499,15 @@ const isJobStoppable = (status: string | undefined): boolean => {
   if (!status) return false
 
   // 可停止的状态：正在运行或处理中的状态
+  // 注意：INITIALIZING 状态不允许停止，需要等待初始化完成
   const stoppableStatuses = [
     'RUNNING',
-    'INITIALIZING',
     'RESTARTING',
     'RECONCILING',
     'FAILING',
     'CANCELLING',
     // 兼容小写
-    'running',
-    'pending'
+    'running'
   ]
 
   return stoppableStatuses.includes(status)

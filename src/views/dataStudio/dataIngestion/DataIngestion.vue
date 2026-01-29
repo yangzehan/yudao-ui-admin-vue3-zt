@@ -149,6 +149,7 @@
                               v-if="file.activeToolbarKey === 'config'"
                               :file="file"
                               :show-execution-type="false"
+                              :show-flink-cdc-dist-jar-path="true"
                               @update:config="(newConfig) => handleConfigUpdate(file, newConfig)"
                             />
                           </el-splitter-panel>

@@ -427,7 +427,7 @@ const validateConfig = (config: any): boolean => {
 
   // Flink版本验证（local和yarn-application模式必填）
   if (config.deployMode === 'local' || config.deployMode === 'yarn-application') {
-    const validVersions = ['1.14', '1.15', '1.16', '1.17', '1.18']
+    const validVersions = ['1.14', '1.15', '1.16', '1.17', '1.18', '1.19']
     if (!config.flinkVersion || !validVersions.includes(config.flinkVersion)) {
       message.warning('请选择有效的Flink版本')
       return false

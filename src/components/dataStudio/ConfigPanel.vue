@@ -37,7 +37,8 @@ const configData = ref({
   checkpointInterval: 5000,
   checkpointPath: '',  // 检查点路径，不填则使用后端默认配置
   clusterId: undefined as number | undefined,
-  savepointPath: ''  // 保存点路径，不填则使用后端默认配置
+  savepointPath: '',  // 保存点路径，不填则使用后端默认配置
+  flinkCdcDistJarPath: ''  // Flink CDC Dist Jar包路径
 })
 
 // 监听 showExecutionType 变化，决定是否保留 executionType
@@ -82,7 +83,7 @@ watch(configData, (newConfig) => {
 
 // 是否显示Flink CDC Dist Jar包路径（仅yarn-application模式且props为true时显示）
 const shouldShowCdcDistJarPath = computed(() => {
-  return propsWithDefaults.value.showCdcDistJarPath && configData.value.deployMode === 'yarn-application'
+  return propsWithDefaults.value.showCdcDistJarPath && configData.value?.deployMode === 'yarn-application'
 })
 
 // 是否显示Flink版本选择
@@ -177,7 +178,7 @@ const validateConfig = (config: typeof configData.value): boolean => {
 
   // Flink版本验证（local和yarn-application模式必填）
   if (config.deployMode === 'local' || config.deployMode === 'yarn-application') {
-    const validVersions = ['1.14', '1.15', '1.16', '1.17', '1.18']
+    const validVersions = ['1.14', '1.15', '1.16', '1.17', '1.18', '1.19']
     if (!config.flinkVersion || !validVersions.includes(config.flinkVersion)) {
       ElMessage.warning('请选择有效的Flink版本')
       return false
@@ -320,6 +321,7 @@ defineExpose({
             <el-option label="1.16.x" value="1.16" />
             <el-option label="1.17.x" value="1.17" />
             <el-option label="1.18.x" value="1.18" />
+            <el-option label="1.19.x" value="1.19" />
           </el-select>
         </div>
 
