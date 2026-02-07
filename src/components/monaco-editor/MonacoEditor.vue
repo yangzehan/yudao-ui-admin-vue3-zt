@@ -175,6 +175,19 @@ watch(
   }
 )
 
+// 监听语言变化
+watch(
+  () => props.language,
+  (newLanguage) => {
+    if (editor.value && newLanguage) {
+      const model = editor.value.getModel()
+      if (model) {
+        monaco.editor.setModelLanguage(model, newLanguage)
+      }
+    }
+  }
+)
+
 onBeforeUnmount(() => {
   editor.value?.dispose()
 })

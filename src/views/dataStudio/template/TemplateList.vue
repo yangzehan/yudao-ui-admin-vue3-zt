@@ -400,8 +400,9 @@ const formatDate = (date: string | Date) => {
 // 获取编辑器语言
 const getEditorLanguage = computed(() => {
   const category = formData.category?.toLowerCase()
-  if (category === 'yaml') return 'yaml'
-  return 'sql'
+  const language = category === 'yaml' ? 'yaml' : 'sql'
+  console.log('[getEditorLanguage] category:', category, '-> language:', language)
+  return language
 })
 
 // 搜索防抖

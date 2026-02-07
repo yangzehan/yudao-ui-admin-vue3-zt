@@ -58,15 +58,29 @@ const clusterLoading = ref(false)
 
 // 标记是否正在从外部同步数据（避免循环更新）
 const isSyncingFromExternal = ref(false)
+// 标记是否刚清空了 clusterId（避免被同步覆盖）
+const justClearedClusterId = ref(false)
 
 // 同步外部配置到本地
 watch(() => props.file?.config, (newConfig) => {
   if (newConfig) {
     isSyncingFromExternal.value = true
+    // 如果刚清空了 clusterId，同步时忽略外部的 clusterId
+    const shouldKeepClusterIdCleared = justClearedClusterId.value
+    const prevClusterId = configData.value.clusterId
+
     configData.value = {
       ...configData.value,
       ...newConfig
     }
+
+    // 如果刚清空了 clusterId，同步后继续保持清空状态
+    if (shouldKeepClusterIdCleared && newConfig.clusterId !== undefined) {
+      configData.value.clusterId = undefined
+      // 重置标志，让后续同步正常进行
+      justClearedClusterId.value = false
+    }
+
     // 使用 nextTick 确保配置同步完成后再重置标志位
     nextTick(() => {
       isSyncingFromExternal.value = false
@@ -78,6 +92,8 @@ watch(() => props.file?.config, (newConfig) => {
 watch(configData, (newConfig) => {
   if (!isSyncingFromExternal.value) {
     emit('update:config', { ...newConfig })
+    // emit 完成后重置标志
+    justClearedClusterId.value = false
   }
 }, { deep: true })
 
@@ -132,14 +148,25 @@ const loadClusters = async (type: ClusterType) => {
 }
 
 // 监听部署模式变化，自动加载对应的集群列表
-watch(() => configData.value.deployMode, (newMode) => {
+watch(() => configData.value.deployMode, (newMode, oldMode) => {
+  // 切换部署模式时，如果新模式不需要集群，则清空clusterId
+  if (newMode === 'local') {
+    configData.value.clusterId = undefined
+    justClearedClusterId.value = true
+  }
+  // 如果从一种需要集群的模式切换到另一种也需要集群的模式，也清空clusterId
+  // 避免保留原来选择的集群ID
+  const oldModeNeedsCluster = oldMode === 'remote' || oldMode === 'yarn-application'
+  const newModeNeedsCluster = newMode === 'remote' || newMode === 'yarn-application'
+  if (oldModeNeedsCluster && newModeNeedsCluster && oldMode !== newMode) {
+    configData.value.clusterId = undefined
+    justClearedClusterId.value = true
+  }
+
   if (newMode === 'remote') {
     loadClusters(ClusterType.REMOTE)
   } else if (newMode === 'yarn-application') {
     loadClusters(ClusterType.YARN)
-  } else if (newMode === 'local') {
-    // 切换到local模式时清空clusterId
-    configData.value.clusterId = undefined
   }
 }, { immediate: false })
 

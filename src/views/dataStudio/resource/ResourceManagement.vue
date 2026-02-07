@@ -18,12 +18,12 @@
     </div>
 
     <div class="v-resource-management__content">
-      <el-table :data="resourceList" style="width: 100%" border>
+      <el-table :data="resourceList" style="width: 100%" border v-loading="loading">
         <el-table-column type="selection" width="55" />
         <el-table-column prop="name" label="资源名称" width="200" />
         <el-table-column prop="type" label="类型" width="120">
           <template #default="{ row }">
-            <el-tag :type="getResourceTypeTag(row.type)">{{ row.type }}</el-tag>
+            <el-tag :type="getResourceTypeTag(row.name)">{{ getResourceType(row.name) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="size" label="大小" width="120">
@@ -32,11 +32,15 @@
           </template>
         </el-table-column>
         <el-table-column prop="description" label="描述" />
-        <el-table-column prop="uploadTime" label="上传时间" width="180" />
+        <el-table-column prop="createTime" label="上传时间" width="180">
+          <template #default="{ row }">
+            {{ formatTime(row.createTime, 'yyyy-MM-dd HH:mm:ss') }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" icon="View" @click="handleViewResource(row)">
-              查看
+            <el-button size="small" icon="Download" @click="handleDownload(row)">
+              下载
             </el-button>
             <el-button size="small" icon="Delete" type="danger" @click="handleDeleteResource(row)">
               删除
@@ -54,106 +58,203 @@
         action="#"
         :auto-upload="false"
         :on-change="handleFileChange"
+        :on-remove="handleFileRemove"
         :file-list="fileList"
+        :before-upload="beforeUpload"
+        :limit="1"
+        accept=".jar"
       >
         <el-icon class="el-icon--upload"><upload-filled /></el-icon>
         <div class="el-upload__text">
-          将文件拖到此处，或<em>点击上传</em>
+          将 JAR 文件拖到此处，或<em>点击上传</em>
         </div>
         <template #tip>
           <div class="el-upload__tip">
-            支持上传 JAR、ZIP、SQL 等格式文件，单个文件不超过 100MB
+            支持上传 JAR 格式文件，单个文件不超过 16MB
           </div>
         </template>
       </el-upload>
-      <el-form :model="uploadForm" label-width="80px">
+      <el-form :model="uploadForm" label-width="80px" style="margin-top: 16px;">
         <el-form-item label="资源描述">
           <el-input v-model="uploadForm.description" type="textarea" :rows="3" placeholder="请输入资源描述" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="uploadDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleUploadSubmit">上传</el-button>
+        <el-button type="primary" :loading="uploading" :disabled="fileList.length === 0" @click="handleUploadSubmit">
+          {{ uploading ? '上传中...' : '上传' }}
+        </el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, reactive, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import type { UploadFile, UploadProps } from 'element-plus'
+import { UploadFilled } from '@element-plus/icons-vue'
+import { formatTime } from '@/utils'
+import { uploadResource, getResourcePage, deleteResource, type ResourceVO } from '@/api/dataStudio/resource'
+
+// 加载状态
+const loading = ref(false)
+const uploading = ref(false)
 
 // 上传对话框显示状态
 const uploadDialogVisible = ref(false)
 
 // 文件列表
-const fileList = ref([])
+const fileList = ref<UploadFile[]>([])
 
 // 资源列表
-const resourceList = ref([
-  {
-    id: 1,
-    name: 'flink-connector-mysql.jar',
-    type: 'jar',
-    size: 1024 * 1024 * 5, // 5MB
-    description: 'Flink MySQL 连接器',
-    uploadTime: '2024-01-01 10:00:00'
-  },
-  {
-    id: 2,
-    name: 'udf-functions.zip',
-    type: 'zip',
-    size: 1024 * 1024 * 2, // 2MB
-    description: '自定义 UDF 函数包',
-    uploadTime: '2024-01-01 11:00:00'
-  },
-  {
-    id: 3,
-    name: 'sample-data.sql',
-    type: 'sql',
-    size: 1024 * 50, // 50KB
-    description: '示例数据 SQL 文件',
-    uploadTime: '2024-01-01 12:00:00'
-  }
-])
+const resourceList = ref<ResourceVO[]>([])
 
 // 上传表单
 const uploadForm = reactive({
   description: ''
 })
 
+// 挂载时获取资源列表
+onMounted(() => {
+  getResourceListData()
+})
+
+// 获取资源列表数据
+const getResourceListData = async () => {
+  loading.value = true
+  try {
+    const data = await getResourcePage({})
+    resourceList.value = data.list
+  } catch (error: any) {
+    ElMessage.error(error.message || '获取资源列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 上传前校验
+const beforeUpload: UploadProps['beforeUpload'] = (rawFile) => {
+  // 文件类型校验（JAR）
+  const isJar = rawFile.name.toLowerCase().endsWith('.jar')
+  if (!isJar) {
+    ElMessage.warning('仅支持上传 JAR 格式文件！')
+    return false
+  }
+  // 文件大小校验 (16MB = 16 * 1024 * 1024)
+  const isLt16M = rawFile.size / 1024 / 1024 < 16
+  if (!isLt16M) {
+    ElMessage.warning('上传文件大小不能超过 16MB！')
+    return false
+  }
+  return true
+}
+
+// 文件选择变化
+const handleFileChange = (file: UploadFile) => {
+  // 检查文件类型
+  if (file.name && !file.name.toLowerCase().endsWith('.jar')) {
+    ElMessage.warning('仅支持上传 JAR 格式文件！')
+    fileList.value = []
+    return
+  }
+  // 检查文件大小
+  if (file.size && file.size > 16 * 1024 * 1024) {
+    ElMessage.warning('上传文件大小不能超过 16MB！')
+    fileList.value = []
+    return
+  }
+  fileList.value = [file]
+}
+
+// 文件移除
+const handleFileRemove = () => {
+  fileList.value = []
+}
+
 // 事件处理
 const handleUploadResource = () => {
+  uploadForm.description = ''
+  fileList.value = []
   uploadDialogVisible.value = true
 }
 
 const handleDownloadResource = () => {
-  ElMessage.info('下载资源功能开发中...')
+  if (resourceList.value.length === 0) {
+    ElMessage.warning('请先选择要下载的资源')
+    return
+  }
+  ElMessage.info('请在操作列点击下载按钮选择要下载的资源')
 }
 
 const handleRefresh = () => {
+  getResourceListData()
   ElMessage.success('资源列表已刷新')
 }
 
-const handleViewResource = (row: any) => {
-  ElMessage.info(`查看资源: ${row.name}`)
+const handleDownload = (row: ResourceVO) => {
+  if (row.fileUrl) {
+    window.open(row.fileUrl, '_blank')
+  } else {
+    ElMessage.warning('文件地址不存在')
+  }
 }
 
-const handleDeleteResource = (row: any) => {
-  ElMessage.warning(`删除资源: ${row.name}`)
+const handleDeleteResource = (row: ResourceVO) => {
+  ElMessageBox.confirm(`确定要删除资源 "${row.name}" 吗？`, '删除确认', {
+    type: 'warning'
+  }).then(async () => {
+    try {
+      await deleteResource(row.id!)
+      ElMessage.success('删除成功')
+      getResourceListData()
+    } catch (error: any) {
+      ElMessage.error(error.message || '删除失败')
+    }
+  }).catch(() => {})
 }
 
-const handleFileChange = (file: any) => {
-  console.log('文件选择:', file)
+const handleUploadSubmit = async () => {
+  if (fileList.value.length === 0) {
+    ElMessage.warning('请选择要上传的文件')
+    return
+  }
+
+  const file = fileList.value[0]
+  if (!file.raw) {
+    ElMessage.warning('文件无效')
+    return
+  }
+
+  uploading.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file.raw)
+    formData.append('description', uploadForm.description)
+
+    await uploadResource(formData)
+    ElMessage.success('上传成功')
+    uploadDialogVisible.value = false
+    getResourceListData()
+  } catch (error: any) {
+    ElMessage.error(error.message || '上传失败')
+  } finally {
+    uploading.value = false
+  }
 }
 
-const handleUploadSubmit = () => {
-  ElMessage.success('上传资源成功')
-  uploadDialogVisible.value = false
+// 获取资源类型
+const getResourceType = (name: string): string => {
+  if (name.toLowerCase().endsWith('.jar')) {
+    return 'jar'
+  }
+  const ext = name.substring(name.lastIndexOf('.') + 1)
+  return ext
 }
 
 // 获取资源类型标签
-const getResourceTypeTag = (type: string) => {
+const getResourceTypeTag = (name: string): string => {
+  const type = getResourceType(name)
   const typeMap: Record<string, string> = {
     jar: '',
     zip: 'success',
@@ -165,7 +266,7 @@ const getResourceTypeTag = (type: string) => {
 }
 
 // 格式化文件大小
-const formatFileSize = (bytes: number) => {
+const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 B'
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB']

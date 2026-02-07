@@ -221,6 +221,19 @@
       :file-name="(openedFiles.find(f => f.id?.toString() === activeTabId) as OpenedFile | undefined)?.name"
       @rollback="handleVersionRollback"
     />
+
+    <!-- 模板选择弹窗 -->
+    <YamlTemplateSelectDialog
+      v-model="templateDialogVisible"
+      @select="handleTemplateSelect"
+    />
+
+    <!-- 占位符填充弹窗 -->
+    <YamlPlaceholderDialog
+      v-model="placeholderDialogVisible"
+      :template="placeholderTemplate"
+      @submit="handlePlaceholderSubmit"
+    />
     </div>
   </ContentWrap>
 </template>
@@ -251,6 +264,9 @@ import {
 import { ElMessageBox } from 'element-plus'
 import VersionPanel from './components/VersionPanel.vue'
 import ConfigPanel from '@/components/dataStudio/ConfigPanel.vue'
+import YamlTemplateSelectDialog from './components/YamlTemplateSelectDialog.vue'
+import YamlPlaceholderDialog from './components/YamlPlaceholderDialog.vue'
+import { SqlTemplateDetailVO } from '@/api/dataStudio/template'
 
 const message = useMessage() // 消息弹窗
 
@@ -294,6 +310,19 @@ const targetFolderId = ref<number>(0)
 // 版本面板状态
 const versionPanelVisible = ref(false)
 const versionPanelRef = ref()
+
+// ==================== 模板相关状态 ====================
+
+// 模板选择弹窗
+const templateDialogVisible = ref(false)
+const templateDialogParentFolder = ref<FileManageVO | null>(null)
+
+// 占位符填充弹窗
+const placeholderDialogVisible = ref(false)
+const placeholderTemplate = ref<SqlTemplateDetailVO | null>(null)
+
+const pendingFileName = ref('')
+const pendingPlaceholderValues = ref<Record<string, string>>({})
 
 // ==================== 工具栏数据 ====================
 
@@ -448,41 +477,115 @@ const flattenFolders = (nodes: FileManageVO[], parentPath: string = ''): { value
 
 // ==================== 右键菜单操作 ====================
 
-// 新增文件
-const handleCreateFile = async () => {
+// 新增文件 - 打开模板选择弹窗
+const handleCreateFile = () => {
   const folder = contextMenuTarget.value
+  templateDialogParentFolder.value = folder
+  templateDialogVisible.value = true
+  hideContextMenu()
+}
+
+// 处理模板选择
+const handleTemplateSelect = async (template: SqlTemplateDetailVO) => {
+  // 检查模板中是否有占位符
+  const hasPlaceholders = template.content && template.content.includes('${')
+
+  if (hasPlaceholders) {
+    // 有占位符，打开占位符填充弹窗
+    placeholderTemplate.value = template
+    placeholderDialogVisible.value = true
+  } else {
+    // 没有占位符，直接弹出文件命名对话框
+    openNamingDialog(template, {})
+  }
+}
+
+// 打开文件命名对话框
+const openNamingDialog = (template: SqlTemplateDetailVO, placeholderValues: Record<string, string>) => {
+  placeholderTemplate.value = template
+  pendingPlaceholderValues.value = placeholderValues
+  pendingFileName.value = ''
+
+  // 弹出文件命名对话框
+  ElMessageBox.prompt('请输入YAML文件名称（无需输入.yaml扩展名）', '新建YAML文件', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    inputPattern: /.+/,
+    inputErrorMessage: '文件名称不能为空',
+    inputValue: template.name.replace(/\.(yaml|yml)$/i, '')
+  }).then(async ({ value }) => {
+    await confirmCreateFile(value)
+  }).catch(() => {
+    // 用户取消
+  })
+}
+
+// 确认创建文件
+const confirmCreateFile = async (fileName: string) => {
+  if (!placeholderTemplate.value) return
+
+  const folder = templateDialogParentFolder.value
+  const parentId = folder?.type === 'folder' ? folder.id : folder?.parentId || 0
+  const finalFileName = fileName.endsWith('.yaml') || fileName.endsWith('.yml') ? fileName : `${fileName}.yaml`
+
   try {
-    const { value: fileName } = await ElMessageBox.prompt('请输入YAML文件名称（无需输入.yaml扩展名）', '新增YAML文件', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      inputPattern: /.+/,
-      inputErrorMessage: '文件名称不能为空'
-    })
-
-    const parentId = folder?.type === 'folder' ? folder.id : folder?.parentId || 0
-    // 自动添加 .yaml 扩展名
-    const finalFileName = fileName.endsWith('.yaml') || fileName.endsWith('.yml') ? fileName : `${fileName}.yaml`
-    const filePath = generateFilePath(folder?.filePath || '/datastudio', finalFileName)
-    const type = 'yaml'
-
-    await createFile({
+    // 创建文件
+    const fileId = await createFile({
       name: finalFileName,
-      type,
+      type: 'yaml',
       parentId,
-      filePath,
+      filePath: generateFilePath(folder?.filePath || '/datastudio', finalFileName),
       sort: 0,
       status: 1
     })
 
     message.success('创建成功')
     await refreshFileTree()
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('创建文件失败:', error)
-      message.error('创建文件失败')
+
+    // 获取新创建的文件内容
+    const newFileData = await getFileData(fileId)
+
+    // 替换占位符并保存内容
+    let fileContent = placeholderTemplate.value.content || ''
+    if (Object.keys(pendingPlaceholderValues.value).length > 0) {
+      for (const [key, value] of Object.entries(pendingPlaceholderValues.value)) {
+        fileContent = fileContent.replace(new RegExp(`\\$\\{${key}}`, 'g'), value || `\${${key}}`)
+      }
     }
-  } finally {
-    hideContextMenu()
+
+    // 保存文件内容
+    await saveFileData({
+      id: fileId,
+      name: finalFileName,
+      type: 'yaml',
+      parentId,
+      filePath: newFileData.filePath,
+      content: fileContent,
+      sort: 0,
+      status: 1,
+      config: placeholderTemplate.value.defaultConfig || {}
+    })
+
+    // 打开新创建的文件
+    const newFile = fileTreeData.value.find(f => f.id === fileId)
+    if (newFile) {
+      await loadFileContent(newFile)
+    }
+  } catch (error) {
+    console.error('创建文件失败:', error)
+    message.error('创建文件失败')
+  }
+
+  // 重置状态
+  placeholderTemplate.value = null
+  pendingPlaceholderValues.value = {}
+  pendingFileName.value = ''
+}
+
+// 处理占位符填充完成
+const handlePlaceholderSubmit = (placeholderValues: Record<string, string>, fileName: string) => {
+  if (placeholderTemplate.value) {
+    openNamingDialog(placeholderTemplate.value, placeholderValues)
   }
 }
 

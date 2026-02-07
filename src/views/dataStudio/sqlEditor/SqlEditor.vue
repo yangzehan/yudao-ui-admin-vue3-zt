@@ -87,7 +87,7 @@
           <el-splitter-panel :min="400" class="flex flex-col">
             <!-- 编辑器工具栏 -->
             <div class="flex-shrink-0 px-8px py-6px border-b border-[var(--el-border-color)] bg-[var(--el-bg-color)] flex justify-end items-center gap-6px">
-              <el-button type="primary" size="small" class="h-28px px-12px text-12px" :icon="VideoPlay" @click="handleDeploy">
+              <el-button type="primary" size="small" class="h-28px px-12px text-12px" :icon="VideoPlay" :loading="isDeploying" @click="handleDeploy">
                 部署
               </el-button>
               <el-button type="warning" size="small" class="h-28px px-12px text-12px" icon="Connection">
@@ -328,6 +328,9 @@ const targetFolderId = ref<number>(0)
 
 // 版本面板状态
 const versionPanelVisible = ref(false)
+
+// 部署按钮loading状态
+const isDeploying = ref(false)
 
 // 版本数据
 const versionList = ref<VersionItem[]>([])
@@ -1093,11 +1096,14 @@ const handleDeploy = async () => {
   }
 
   try {
+    isDeploying.value = true
     const result = await deployFile(currentFile.id!)
     message.success('部署成功：' + result)
   } catch (error) {
     console.error('部署失败:', error)
     message.error('部署失败')
+  } finally {
+    isDeploying.value = false
   }
 }
 
